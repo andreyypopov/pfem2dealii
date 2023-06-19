@@ -2,6 +2,7 @@
 #define PFEM2PARAMETERHANDLER_H
 
 #include <string>
+#include <array>
 
 #include <deal.II/base/tensor.h>
 
@@ -13,7 +14,7 @@ class pfem2ParameterHandler
 public:
     pfem2ParameterHandler();
     
-    void readParameters(const std::string& filename);
+    virtual void readParameters(const std::string& filename);
 
     const double& getDynamicViscosity() const;
     const double& getFluidDensity() const;
@@ -61,5 +62,7 @@ private:
     bool outputParticles;
     unsigned int boundaryForForcesComputation;
 };
+
+template class pfem2ParameterHandler<2>;
 
 #endif // PFEM2PARAMETERHANDLER_H

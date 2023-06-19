@@ -19,8 +19,6 @@
 #include <deal.II/lac/trilinos_solver.h>
 #include <deal.II/lac/trilinos_precondition.h>
 
-//#include "pfem2solver.h"
-
 using namespace dealii;
 
 const int QUAD_POINTS_PER_DIRECTION = 2;
@@ -33,14 +31,14 @@ class pfem2Fem
 {
 public:
 	pfem2Fem(const FE_Q<dim> *finite_element);
-	virtual ~pfem2Fem(){};
+	virtual ~pfem2Fem();
 
 	virtual void setup_system();
 	virtual void initialize_fem_solution();
 	virtual void fem_step();
 	virtual void output_fem_solution(int timestep_number, bool exportPrediction = false);
 
-	void setPfem2Solver(const pfem2Solver<dim>* mainSolver);
+	void setPfem2Solver(pfem2Solver<dim>* mainSolver);
 
 	const DoFHandler<dim> &getDoFhandler() const;
 
@@ -68,7 +66,7 @@ private:
 	QGauss<dim> quadrature_formula;
 	QGauss<dim-1> face_quadrature_formula;
 
-	const FE_Q<dim> feq;
+	const FE_Q<dim> *feq;
 
 	FEValues<dim> fe_values;
 	FEFaceValues<dim> fe_face_values;
@@ -107,10 +105,9 @@ private:
 	std::array<AffineConstraints<double>, dim> constraintsV;
 	
 	SolverControl solver_control;
-	TrilinosWrappers::SolverBase trilinosSolver;
-	std::array<TrilinosWrappers::PreconditionBase, dim> preconditionerPredV;
-	std::array<TrilinosWrappers::PreconditionBase, dim> preconditionerV;
-	TrilinosWrappers::PreconditionBase preconditionerP;
+	TrilinosWrappers::SolverBase *trilinosSolver;
+	TrilinosWrappers::PreconditionBase *preconditionerV;
+	TrilinosWrappers::PreconditionBase *preconditionerP;
 	
 	double mu;
 	double rho;
@@ -118,5 +115,7 @@ private:
 	
 	pfem2Solver<dim>* mainSolver;
 };
+
+template class pfem2Fem<2>;
 
 #endif // PFEM2FEM_H

@@ -17,7 +17,8 @@ pfem2ParameterHandler<dim>::pfem2ParameterHandler()
     , outputParticles(false)
     , boundaryForForcesComputation(0)
 {
-	for (int i = 0; i < dim; ++i) particlesPerCell[i] = 2;
+	for (int i = 0; i < dim; ++i)
+		particlesPerCell[i] = 2;
 }
 
 template<int dim>
@@ -53,16 +54,20 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 	{
 		prm.declare_entry ("Initial pressure", "0.0");
 		prm.declare_entry ("Initial velocity x", "0.0");
-		if (dim > 1) prm.declare_entry ("Initial velocity y", "0.0");
-		if (dim > 2) prm.declare_entry ("Initial velocity z", "0.0");
+		if (dim > 1)
+			prm.declare_entry ("Initial velocity y", "0.0");
+		if (dim > 2)
+			prm.declare_entry ("Initial velocity z", "0.0");
 	}
 	prm.leave_subsection();
 	
 	prm.enter_subsection("Particles");
 	{
 		prm.declare_entry ("Number of particles in the x direction", "2");
-		if (dim > 1) prm.declare_entry ("Number of particles in the y direction", "2");
-		if (dim > 2) prm.declare_entry ("Number of particles in the z direction", "2");
+		if (dim > 1)
+			prm.declare_entry ("Number of particles in the y direction", "2");
+		if (dim > 2)
+			prm.declare_entry ("Number of particles in the z direction", "2");
 	}
 	prm.declare_entry ("Maximum number of particles per cell part", "2");
 	prm.declare_entry ("Particle integration steps", "5");
@@ -77,8 +82,8 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 	}
 	prm.leave_subsection();
 	
-	//2. Parsing input file
-	prm.parse_input (filename);	
+	//2. Parsing input file (undefined entries are allowed to be skipped)
+	prm.parse_input (filename, "", true);	
 	
 	//3. Reading parameters from file
 	prm.enter_subsection("Fluid characteristics");
@@ -117,8 +122,10 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 	prm.enter_subsection("Particles");
 	{
 		particlesPerCell[0] = prm.get_integer("Number of particles in the x direction");
-		if (dim > 1) particlesPerCell[1] = prm.get_integer("Number of particles in the y direction");
-		if (dim > 2) particlesPerCell[2] = prm.get_integer("Number of particles in the z direction");
+		if (dim > 1)
+			particlesPerCell[1] = prm.get_integer("Number of particles in the y direction");
+		if (dim > 2)
+			particlesPerCell[2] = prm.get_integer("Number of particles in the z direction");
 	}
 	maxParticlesPerCellPart = prm.get_integer ("Maximum number of particles per cell part");
 	particleIntegrationSteps = prm.get_integer ("Particle integration steps");
@@ -131,7 +138,7 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 		outputParticles = prm.get_bool("Output particles");
 		boundaryForForcesComputation = prm.get_integer("Boundary id for forces computation");
 	}
-	prm.leave_subsection();	
+	prm.leave_subsection();
 }
 
 template <int dim>

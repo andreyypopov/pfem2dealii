@@ -1,0 +1,40 @@
+subsection Fluid characteristics
+	set Dynamic viscosity = 0.001 
+	set Density = 1.0 
+end
+
+subsection Computation parameters
+	set Time step = 0.001
+	set Final Time = 10.0
+	set Outer iterations = 2
+end
+
+subsection Linear solver parameters
+	set Tolerance = 1e-7
+	set Number of iterations = 10000
+end
+
+subsection Initial conditions
+	set Initial pressure = 0.0
+	set Initial velocity x = 0.0
+	set Initial velocity y = 0.0
+end
+
+subsection Particles
+	set Number of particles in the x direction = 2
+	set Number of particles in the y direction = 2
+	set Maximum number of particles per cell part = 5
+	set Particle integration steps = 3
+end
+
+subsection Input and output parameters
+	set Mesh file name = airfoilMeshFine.unv
+	set Results output frequency = 100
+	set Output particles = false
+	set Boundary id for forces computation = 3
+end
+
+subsection Free-stream flow
+	set Velocity = 10.0
+	set Angle of attack = 4.0
+end

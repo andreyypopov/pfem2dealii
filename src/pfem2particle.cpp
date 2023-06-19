@@ -8,18 +8,16 @@ template<int dim>
 pfem2Particle<dim>::pfem2Particle(const Point<dim> &location, const Point<dim> &reference_location, const unsigned id)
 	: id (id)
 {
-	for(int i = 0; i < dim; ++i){
-		this->location[i] = location[i];
-		this->reference_location[i] = reference_location[i];
-		this->velocity[i] = 0.0;
-		this->velocity_ext[i] = 0.0;
-	}
+	this->location = location;
+	this->reference_location = reference_location;
+	this->velocity = 0;
+	this->velocity_ext = 0;
 }
 
 template<int dim>
 pfem2Particle<dim>::pfem2Particle(const void* &data)
 {
-	const types::particle_index *id_data = static_cast<const types::particle_index*> (data);
+	const unsigned int *id_data = static_cast<const unsigned int*> (data);
     id = *id_data++;
     
     const int *triaData = reinterpret_cast<const int*> (id_data);
@@ -54,35 +52,25 @@ pfem2Particle<dim>::pfem2Particle()
 template<int dim>
 void pfem2Particle<dim>::set_location (const Point<dim> &new_location)
 {
-	for(int i = 0; i < dim; ++i)
-		location[i] = new_location[i];
+	this->location = new_location;
 }
 
 template<int dim>
 const Point<dim> &pfem2Particle<dim>::get_location () const
 {
-    Point<dim> res;
-    for(int i = 0; i < dim; ++i)
-		res[i] = location[i];
-    
-    return res;
+    return location;
 }
 
 template<int dim>
 void pfem2Particle<dim>::set_reference_location (const Point<dim> &new_reference_location)
 {
-    for(int i = 0; i < dim; ++i)
-		reference_location[i] = new_reference_location[i];
+    this->reference_location = new_reference_location;
 }
 
 template<int dim>
 const Point<dim> &pfem2Particle<dim>::get_reference_location () const
 {
-	Point<dim> res;
-    for(int i = 0; i < dim; ++i)
-		res[i] = reference_location[i];
-    
-    return res;
+	return reference_location;
 }
 
 template<int dim>
@@ -145,21 +133,13 @@ void pfem2Particle<dim>::set_tria_position(const int &new_position)
 template<int dim>
 const Tensor<1,dim> &pfem2Particle<dim>::get_velocity() const
 {
-	Tensor<1,dim> res;
-    for(int i = 0; i < dim; ++i)
-		res[i] = velocity[i];
-    
-    return res;
+	return velocity;
 }
 
 template<int dim>
 const Tensor<1,dim> &pfem2Particle<dim>::get_velocity_ext() const
 {
-	Tensor<1,dim> res;
-    for(int i = 0; i < dim; ++i)
-		res[i] = velocity_ext[i];
-    
-    return res;
+	return velocity_ext;
 }
 
 template<int dim>
@@ -171,8 +151,7 @@ double pfem2Particle<dim>::get_velocity_component(int component) const
 template<int dim>
 void pfem2Particle<dim>::set_velocity (const Tensor<1,dim> &new_velocity)
 {
-	for(int i = 0; i < dim; ++i)
-		velocity[i] = new_velocity[i];
+	velocity = new_velocity;
 }
 
 template<int dim>
@@ -184,8 +163,7 @@ void pfem2Particle<dim>::set_velocity_component (const double value, int compone
 template<int dim>
 void pfem2Particle<dim>::set_velocity_ext (const Tensor<1,dim> &new_ext_velocity)
 {
-	for(int i = 0; i < dim; ++i)
-		velocity_ext[i] = new_ext_velocity[i];
+	velocity_ext = new_ext_velocity;
 }
 
 template<int dim>
@@ -236,7 +214,7 @@ template<int dim>
 std::size_t pfem2Particle<dim>::serialized_size_in_bytes() const
 {
 	std::size_t size = sizeof(id) + sizeof(location) + sizeof(reference_location) + sizeof(tria_position)
-		+ sizeof(velocity) + sizeof(velocity_ext);
+		+ sizeof(cell_dofs) + sizeof(velocity) + sizeof(velocity_ext);
 
 	return size;
 }
@@ -256,7 +234,7 @@ void pfem2Particle<dim>::write_data (void* &data) const
     for (unsigned int i = 0; i < GeometryInfo<dim>::vertices_per_cell; ++i,++triaData)
 		*triaData = cell_dofs[i];
     
-    double *pdata = reinterpret_cast<double*> (id_data);
+    double *pdata = reinterpret_cast<double*> (triaData);
 
     // Write location data
     for (unsigned int i = 0; i < dim; ++i,++pdata)
@@ -276,3 +254,4 @@ void pfem2Particle<dim>::write_data (void* &data) const
      
     data = static_cast<void*> (pdata);
 }
+

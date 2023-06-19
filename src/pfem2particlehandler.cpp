@@ -11,7 +11,7 @@ pfem2ParticleHandler<dim>::pfem2ParticleHandler(const FE_Q<dim> *finite_element)
 	: particles()
     , feq(finite_element)
 {
-	this->mapping = MappingQ1<dim>();
+
 }
 
 template<int dim>
@@ -27,7 +27,7 @@ const pfem2Solver<dim>* pfem2ParticleHandler<dim>::getPfem2Solver() const
 }
 
 template<int dim>
-void pfem2ParticleHandler<dim>::setPfem2Solver(const pfem2Solver<dim> *mainSolver)
+void pfem2ParticleHandler<dim>::setPfem2Solver(pfem2Solver<dim> *mainSolver)
 {
 	this->mainSolver = mainSolver;
 
@@ -44,49 +44,54 @@ void pfem2ParticleHandler<dim>::seed_particles()
 {
     TimerOutput::Scope timer_section(mainSolver->getTimer(), "Particle seeding");
     
-    const auto& quantities = mainSolver->getParameterHandler().getParticlesPerCell();
+    quantities = mainSolver->getParameterHandler().getParticlesPerCell();
     
     //generate possible combinations of indices for cell parts within a single cell
     int cellPartsCount = 1;
     for(int i = 0; i < dim; ++i)
         cellPartsCount *= quantities[i];
-
+        
     cellPartsIndices.reserve(cellPartsCount);  
     std::array<int, dim> cellPartIndex;
     for(int i = 0; i < quantities[0]; ++i){
         cellPartIndex[0] = i;
 
-        if(dim > 1)
+        if(dim > 1){
             for(int j = 0; j < quantities[1]; ++j){
                 cellPartIndex[1] = j;
 
                 if(dim > 2)
-                    for(int k = 0; k < quantities[2]; ++k)
+                    for(int k = 0; k < quantities[2]; ++k){
                         cellPartIndex[2] = k;
+                        cellPartsIndices.push_back(cellPartIndex);
+					}
+				else
+					cellPartsIndices.push_back(cellPartIndex);
             }
-
-        cellPartsIndices.push_back(cellPartIndex);
+		}
+		else
+			cellPartsIndices.push_back(cellPartIndex);
     }
 
-    particles.reserve(cellPartsIndices * mainSolver->getTriangulation()->n_active_cells());
-    const auto& solutionV = mainSolver->getFemSolver()->getSolutionV();
+    particles.reserve(cellPartsCount * mainSolver->getTriangulation().n_active_cells());
+    const auto& solutionV = mainSolver->getFemSolver().getSolutionV();
     double shapeValue;
     
     double h[dim];
     for(int i = 0; i < dim; ++i)
         h[i] = 1.0 / quantities[i];
 
-    for(const auto& cell : mainSolver->getFemSolver()->getDoFhandler().active_cell_iterators())
+    for(const auto& cell : mainSolver->getFemSolver().getDoFhandler().active_cell_iterators())
         if(cell->is_locally_owned())
             for(const auto& index : cellPartsIndices){
                 Point<dim> newPoint;
                 for(int i = 0; i < dim; ++i)
                     newPoint[i] = (index[i] + 1.0 / 2) * h[i];
-                
+                    
                 pfem2Particle particle(mapping.transform_unit_to_real_cell(cell, newPoint), newPoint, ++particleCount);
                 particle.set_cell_dofs(cell);
 
-                Tensor<1,dim> newVelocity(0.0);
+                Tensor<1,dim> newVelocity;
                 
                 for (unsigned int vertex = 0; vertex < GeometryInfo<dim>::vertices_per_cell; ++vertex) {
                     shapeValue = feq->shape_value(vertex, particle.get_reference_location());
@@ -95,7 +100,7 @@ void pfem2ParticleHandler<dim>::seed_particles()
                         newVelocity[i] += shapeValue * solutionV[i](particle.cell_dofs[vertex]);
                 }
 
-                particle.setVelocity(newVelocity);
+                particle.set_velocity(newVelocity);
                 insert_particle(particle, cell);
             }        
 
@@ -109,12 +114,14 @@ void pfem2ParticleHandler<dim>::correct_particle_velocity()
     TimerOutput::Scope timer_section(mainSolver->getTimer(), "Particle velocity correction");
 
     double shapeValue;
-    const auto& solutionV = mainSolver->getFemSolver()->getSolutionV();
-    const auto& oldSolutionV = mainSolver->getFemSolver()->getOldSolutionV();
+    const auto& solutionV = mainSolver->getFemSolver().getSolutionV();
+    const auto& oldSolutionV = mainSolver->getFemSolver().getOldSolutionV();
 
     std::array<TrilinosWrappers::MPI::Vector, dim> deltaV;
-    for(int i = 0; i < dim; ++i)
-        deltaV[i] = solutionV[i] - oldSolutionV[i];
+    for(int i = 0; i < dim; ++i){
+        deltaV[i] = solutionV[i];
+        deltaV[i] -= oldSolutionV[i];
+    }
 
     Tensor<1, dim> velocityCorr;
     for(auto& particleIndex : particles){
@@ -127,7 +134,7 @@ void pfem2ParticleHandler<dim>::correct_particle_velocity()
                 velocityCorr[i] += shapeValue * deltaV[i](particleIndex.cell_dofs[vertex]);
         }
 
-        particleIndex.setVelocity(particleIndex.getVelocity() + velocityCorr);
+        particleIndex.set_velocity(particleIndex.get_velocity() + velocityCorr);
     }
 }
 
@@ -138,7 +145,7 @@ void pfem2ParticleHandler<dim>::move_particles()
 
     Tensor<1, dim> particleTransportVel;
     double shapeValue;
-    const auto& solutionV = mainSolver->getFemSolver()->getSolutionV();
+    const auto& solutionV = mainSolver->getFemSolver().getSolutionV();
 
     for (int np_m = 0; np_m < particle_integration_steps; ++np_m) {
         for(auto& particleIndex : particles){
@@ -154,13 +161,13 @@ void pfem2ParticleHandler<dim>::move_particles()
             particleIndex.set_velocity_ext(particleTransportVel);
             particleIndex.set_location(particleIndex.get_location() + particleTransportVel * particle_transport_timestep);
         }
-
+        
         //update particle reference positions and their binding to cells
-        sort_particles_into_subdomains_and_cells(mainSolver->getFemSolver()->getDoFhandler());
+        sort_particles_into_subdomains_and_cells(mainSolver->getFemSolver().getDoFhandler());
     }
 
     //check number of particles in cells, add new particles, delete excessive particles
-    check_particle_distribution();
+    check_particle_distribution(mainSolver->getFemSolver().getDoFhandler());
 }
 
 template<int dim>
@@ -172,10 +179,11 @@ void pfem2ParticleHandler<dim>::project_particle_fields()
     TrilinosWrappers::MPI::Vector nodeWeights;
 
     for(int i = 0; i < dim; ++i){
-        nodeVelocity[i].reinit(mainSolver->getFemSolver()->getLocallyOwnedDofs(), mainSolver->getCommunicator());
+        nodeVelocity[i].reinit(mainSolver->getFemSolver().getLocallyOwnedDofs(), mainSolver->getCommunicator());
         nodeVelocity[i] = 0;
     }
 
+	nodeWeights.reinit(mainSolver->getFemSolver().getLocallyOwnedDofs(), mainSolver->getCommunicator());
     nodeWeights = 0;
 
     double shapeValue;
@@ -185,10 +193,11 @@ void pfem2ParticleHandler<dim>::project_particle_fields()
             shapeValue = feq->shape_value(vertex, particleIndex.get_reference_location());
 
             for(int i = 0; i < dim; ++i)
-                nodeVelocity[i][particleIndex.cell_dofs[vertex]] += shapeValue * particleIndex->get_velocity_component(i);
+                nodeVelocity[i][particleIndex.cell_dofs[vertex]] += shapeValue * particleIndex.get_velocity_component(i);
 
             nodeWeights[particleIndex.cell_dofs[vertex]] += shapeValue;
         }
+        
 
     for(int i = 0; i < dim; ++i)
         nodeVelocity[i].compress(VectorOperation::add);
@@ -196,13 +205,12 @@ void pfem2ParticleHandler<dim>::project_particle_fields()
     nodeWeights.compress(VectorOperation::add);
 
     for(unsigned int k = nodeWeights.local_range().first; k < nodeWeights.local_range().second; ++k)
-        for(int i = 0; i < dim; ++i){
+        for(int i = 0; i < dim; ++i)
             nodeVelocity[i][k] /= nodeWeights[k];
-        }
 
     for(int i = 0; i < dim; ++i){
         nodeVelocity[i].compress(VectorOperation::insert);
-        mainSolver->getFemSolver()->setSolutionV(nodeVelocity[i], i);
+        mainSolver->getFemSolver().setSolutionV(nodeVelocity[i], i);
     }
 }
 
@@ -223,8 +231,8 @@ void pfem2ParticleHandler<dim>::output_particle_solution(int timestep_number)
 	output << "        <DataArray type=\"Float32\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
 	for(const auto& particleIndex : particles){
 		output << "          " << particleIndex.get_location()[0] << " ";
-        output << ((dim > 1) ? particleIndex.get_location()[1] : "0.0") << " ";
-        output << ((dim > 2) ? particleIndex.get_location()[2] : "0.0") << std::endl;
+        output << ((dim > 1) ? std::to_string(particleIndex.get_location()[1]) : "0.0") << " ";
+        output << ((dim > 2) ? std::to_string(particleIndex.get_location()[2]) : "0.0") << std::endl;
     }
 	output << "        </DataArray>" << std::endl;
 	output << "      </Points>" << std::endl;
@@ -260,8 +268,8 @@ void pfem2ParticleHandler<dim>::output_particle_solution(int timestep_number)
 	output << "        <DataArray type=\"Float32\" Name=\"velocity\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
 	for(const auto& particleIndex : particles){
 		output << "          " << particleIndex.get_velocity_component(0) << " ";
-        output << ((dim > 1) ? particleIndex.get_velocity_component(1) : "0.0") << " ";
-        output << ((dim > 2) ? particleIndex.get_velocity_component(2) : "0.0") << std::endl;
+        output << ((dim > 1) ? std::to_string(particleIndex.get_velocity_component(1)) : "0.0") << " ";
+        output << ((dim > 2) ? std::to_string(particleIndex.get_velocity_component(2)) : "0.0") << std::endl;
     }
 	output << "        </DataArray>" << std::endl;
 
@@ -284,7 +292,7 @@ void pfem2ParticleHandler<dim>::output_particle_solution(int timestep_number)
     output.flush();
     output.close();
 	
-	if (Utilities::MPI::this_mpi_process==0) {
+	if (Utilities::MPI::this_mpi_process(mainSolver->getCommunicator()) == 0) {
         std::ofstream master_output (("particles-" + Utilities::int_to_string (timestep_number, 2) + ".pvtu").c_str());
         
         master_output << "<?xml version=\"1.0\" ?> " << std::endl;
@@ -356,8 +364,8 @@ void pfem2ParticleHandler<dim>::check_particle_distribution(const DoFHandler<dim
         h[i] = 1.0 / quantities[i];
 
     //1. Get information about particle distribution within cells (per each cell part) and delete excessive particles
-    int particleCellPart[dim];
-    for(const auto& particleIndex = particles.begin(); particleIndex != particles.end(); ){
+    std::array<int, dim> particleCellPart;
+    for(auto particleIndex = particles.begin(); particleIndex != particles.end(); ){
         for(int i = 0; i < dim; ++i)
             particleCellPart[i] = particleIndex->get_reference_location()[i] / h[i];
 
@@ -371,14 +379,14 @@ void pfem2ParticleHandler<dim>::check_particle_distribution(const DoFHandler<dim
     }
 
     //2. Add a particle in each empty cell part
-    const auto& solutionV = mainSolver->getFemSolver()->getSolutionV();
+    const auto& solutionV = mainSolver->getFemSolver().getSolutionV();
     double shapeValue;
     
-    for(const auto& cellInfo : particlesInCellParts){
-        const typename DoFHandler<dim>::cell_iterator dofCell(triangulation, triangulation->n_levels() - 1, cellInfo->first, &dof_handler);
+    for(auto& cellInfo : particlesInCellParts){
+        const typename DoFHandler<dim>::cell_iterator dofCell(&triangulation, triangulation.n_levels() - 1, cellInfo.first, &dof_handler);
         
         for(const auto& cellPartIndex : cellPartsIndices)
-            if(cellInfo->second[cellPartIndex] == 0){
+            if(cellInfo.second[cellPartIndex] == 0){
                 Point<dim> newPoint;
                 for(int i = 0; i < dim; ++i)
                     newPoint[i] = (cellPartIndex[i] + 1.0 / 2) * h[i];
@@ -386,7 +394,7 @@ void pfem2ParticleHandler<dim>::check_particle_distribution(const DoFHandler<dim
                 pfem2Particle particle(mapping.transform_unit_to_real_cell(dofCell, newPoint), newPoint, ++particleCount);
                 particle.set_cell_dofs(dofCell);
 
-                Tensor<1,dim> newVelocity(0.0);
+                Tensor<1,dim> newVelocity;
                 
                 for (unsigned int vertex = 0; vertex < GeometryInfo<dim>::vertices_per_cell; ++vertex) {
                     shapeValue = feq->shape_value(vertex, particle.get_reference_location());
@@ -395,7 +403,7 @@ void pfem2ParticleHandler<dim>::check_particle_distribution(const DoFHandler<dim
                         newVelocity[i] += shapeValue * solutionV[i](particle.cell_dofs[vertex]);
                 }
 
-                particle.setVelocity(newVelocity);
+                particle.set_velocity(newVelocity);
                 insert_particle(particle, dofCell);
             }
     }
@@ -407,23 +415,23 @@ void pfem2ParticleHandler<dim>::sort_particles_into_subdomains_and_cells(const D
     const auto& triangulation = mainSolver->getTriangulation();
 
 	std::map<unsigned int, std::vector<pfem2Particle<dim>>> moved_particles;
-	const std::set<unsigned int> ghost_owners = triangulation->ghost_owners();
+	const std::set<unsigned int> ghost_owners = triangulation.ghost_owners();
 
 	for(auto it = begin(); it != end(); ){
-		const typename Triangulation<dim>::cell_iterator cell = (*it).get_surrounding_cell(triangulation);
+		const typename Triangulation<dim>::cell_iterator cell = it->get_surrounding_cell(triangulation);
 		
 		bool found_cell = false;
 		try{
-			const Point<dim> p_unit = mapping.transform_real_to_unit_cell(cell, (*it).get_location());
+			const Point<dim> p_unit = mapping.transform_real_to_unit_cell(cell, it->get_location());
 		
 			if(GeometryInfo<dim>::is_inside_unit_cell(p_unit)){
-				(*it).set_reference_location(p_unit);
+				it->set_reference_location(p_unit);
 				found_cell = true;
 				++it;
 			}
 		} catch(typename Mapping<dim>::ExcTransformationFailed &){
 #ifdef VERBOSE_OUTPUT
-			std::cout << "Transformation failed for particle with global coordinates " << (*it).get_location() << " (checked cell index #" << cell->index() << ")" << std::endl;
+			std::cout << "Transformation failed for particle with global coordinates " << it->get_location() << " (checked cell index #" << cell->index() << ")" << std::endl;
 #endif // VERBOSE_OUTPUT
 		}
 
@@ -431,34 +439,35 @@ void pfem2ParticleHandler<dim>::sort_particles_into_subdomains_and_cells(const D
 			std::vector<unsigned int> neighbor_permutation;
 			
 			Point<dim> current_reference_position;
-			typename Triangulation<dim>::active_cell_iterator current_cell = (*it).get_surrounding_cell(triangulation);
+			typename Triangulation<dim>::active_cell_iterator current_cell = it->get_surrounding_cell(triangulation);
 
-			const unsigned int closest_vertex = (*it).find_closest_vertex_of_cell(current_cell, &mapping);
-			Tensor<1,dim> vertex_to_particle = (*it).get_location() - current_cell->vertex(closest_vertex);
+			const unsigned int closest_vertex = it->find_closest_vertex_of_cell(current_cell, mapping);
+			Tensor<1,dim> vertex_to_particle = it->get_location() - current_cell->vertex(closest_vertex);
 			vertex_to_particle /= vertex_to_particle.norm();
 
 			const unsigned int closest_vertex_index = current_cell->vertex_index(closest_vertex);
 			const unsigned int n_neighbor_cells = vertex_to_cells[closest_vertex_index].size();
 
 			neighbor_permutation.resize(n_neighbor_cells);		  
-			for (unsigned int i=0; i<n_neighbor_cells; ++i) neighbor_permutation[i] = i;
+			for (unsigned int i=0; i<n_neighbor_cells; ++i)
+                neighbor_permutation[i] = i;
 
 			std::sort(neighbor_permutation.begin(), neighbor_permutation.end(),
-				std::bind(&compare_particle_association, std::placeholders::_1, std::placeholders::_2, std::cref(vertex_to_particle), std::cref(vertex_to_cell_centers[closest_vertex_index])));
+				std::bind(&compare_particle_association<dim>, std::placeholders::_1, std::placeholders::_2, std::cref(vertex_to_particle), std::cref(vertex_to_cell_centers[closest_vertex_index])));
 
 			for (unsigned int i=0; i<n_neighbor_cells; ++i){
 				typename std::set<typename Triangulation<dim>::active_cell_iterator>::const_iterator cell = vertex_to_cells[closest_vertex_index].begin();
 				std::advance(cell,neighbor_permutation[i]);
               
 				try {
-					const Point<dim> p_unit = mapping.transform_real_to_unit_cell(*cell, (*it).get_location());
+					const Point<dim> p_unit = mapping.transform_real_to_unit_cell(*cell, it->get_location());
 					if (GeometryInfo<dim>::is_inside_unit_cell(p_unit)){
 						current_cell = *cell;
-						(*it).set_reference_location(p_unit);
-						(*it).set_tria_position(current_cell->index());
+						it->set_reference_location(p_unit);
+						it->set_tria_position(current_cell->index());
 						
-						const typename DoFHandler<dim>::cell_iterator dofCell(triangulation, triangulation->n_levels() - 1, current_cell->index(), &dof_handler);
-						(*it).set_cell_dofs(dofCell);
+						const typename DoFHandler<dim>::cell_iterator dofCell(&triangulation, triangulation.n_levels() - 1, current_cell->index(), &dof_handler);
+						it->set_cell_dofs(dofCell);
 						
 						found_cell = true;
 						
@@ -469,7 +478,8 @@ void pfem2ParticleHandler<dim>::sort_particles_into_subdomains_and_cells(const D
             }
 
 			if (found_cell) {
-				if(current_cell->is_locally_owned()) ++it;
+				if(current_cell->is_locally_owned())
+                    ++it;
 				else {
 					moved_particles[current_cell->subdomain_id()].push_back(*it);
 					*it = std::move(particles.back());
@@ -483,9 +493,11 @@ void pfem2ParticleHandler<dim>::sort_particles_into_subdomains_and_cells(const D
 	}
 	
 #ifdef DEAL_II_WITH_MPI
-	if(dealii::Utilities::MPI::n_mpi_processes(mainSolver->getCommunicator()) > 1) send_recv_particles(moved_particles);
+	if(dealii::Utilities::MPI::n_mpi_processes(mainSolver->getCommunicator()) > 1)
+        send_recv_particles(moved_particles);
 	
-	for (auto ghost_domain_id = ghost_owners.begin(); ghost_domain_id != ghost_owners.end(); ++ghost_domain_id) moved_particles[*ghost_domain_id].clear();
+	for (auto ghost_domain_id = ghost_owners.begin(); ghost_domain_id != ghost_owners.end(); ++ghost_domain_id)
+        moved_particles[*ghost_domain_id].clear();
 	moved_particles.clear();
 #endif //DEAL_II_WITH_MPI
 }
@@ -495,7 +507,7 @@ template<int dim>
 void pfem2ParticleHandler<dim>::send_recv_particles(const std::map<unsigned int, std::vector<pfem2Particle<dim>>> &particles_to_send)
 {
 	// Determine the communication pattern
-    const std::set<unsigned int> ghost_owners = mainSolver->getTriangulation()->ghost_owners();
+    const std::set<unsigned int> ghost_owners = mainSolver->getTriangulation().ghost_owners();
     const std::vector<unsigned int> neighbors (ghost_owners.begin(), ghost_owners.end());
     const unsigned int n_neighbors = neighbors.size();
 
@@ -504,7 +516,7 @@ void pfem2ParticleHandler<dim>::send_recv_particles(const std::map<unsigned int,
 
     // TODO: Implement the shipping of particles to processes that are not ghost owners of the local domain
     for (auto send_particles = particles_to_send.begin(); send_particles != particles_to_send.end(); ++send_particles)
-      Assert(ghost_owners.find(send_particles->first) != ghost_owners.end(), ExcNotImplemented());
+		Assert(ghost_owners.find(send_particles->first) != ghost_owners.end(), ExcNotImplemented());
 
     unsigned int n_send_particles = 0;
     for (auto send_particles = particles_to_send.begin(); send_particles != particles_to_send.end(); ++send_particles)
@@ -597,7 +609,7 @@ void pfem2ParticleHandler<dim>::send_recv_particles(const std::map<unsigned int,
     const void *recv_data_it = static_cast<const void *> (recv_data.data());
 
     while (reinterpret_cast<std::size_t> (recv_data_it) - reinterpret_cast<std::size_t> (recv_data.data()) < total_recv_data){
-		pfem2Particle newParticle(recv_data_it);
+		pfem2Particle<dim> newParticle(recv_data_it);
         particles.push_back(newParticle);
     }
 	

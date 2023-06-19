@@ -2,9 +2,9 @@
 #define PFEM2PARTICLEHANDLER_H
 
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/mapping_q1.h>
 
 #include "pfem2particle.h"
-//#include "pfem2solver.h"
 
 using namespace dealii;
 
@@ -32,7 +32,7 @@ public:
     void initialize_maps();
     
     const pfem2Solver<dim>* getPfem2Solver() const;
-	void setPfem2Solver(const pfem2Solver<dim> *mainSolver);
+	void setPfem2Solver(pfem2Solver<dim> *mainSolver);
 
     void seed_particles();
     void correct_particle_velocity();
@@ -49,7 +49,7 @@ private:
 	void send_recv_particles(const std::map<unsigned int, std::vector<pfem2Particle<dim>>> &particles_to_send);
 #endif
 
-    Mapping<dim> mapping;
+    MappingQ1<dim> mapping;
 
     std::vector<std::set<typename Triangulation<dim>::active_cell_iterator>> vertex_to_cells;
     std::vector<std::vector<Tensor<1,dim>>> vertex_to_cell_centers;
@@ -67,10 +67,12 @@ private:
 	
 	pfem2Solver<dim>* mainSolver;
 
-    FE_Q<dim> *feq;
+    const FE_Q<dim> *feq;
 };
 
 template<int dim>
 bool compare_particle_association(const unsigned int a, const unsigned int b, const Tensor<1,dim> &particle_direction, const std::vector<Tensor<1,dim>> &center_directions);
+
+template class pfem2ParticleHandler<2>;
 
 #endif // PFEM2PARTICLEHANDLER_H

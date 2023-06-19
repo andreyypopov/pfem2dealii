@@ -4,25 +4,33 @@
 #include <deal.II/grid/grid_out.h>
 
 template<int dim>
-pfem2Solver<dim>::pfem2Solver(const pfem2Fem<dim> *femSolver, const pfem2ParticleHandler<dim> *particleHandler)
+pfem2Solver<dim>::pfem2Solver(pfem2Fem<dim> *femSolver,
+	pfem2ParticleHandler<dim> *particleHandler, pfem2ParameterHandler<dim> *parameterHandler)
 	: mpi_communicator (MPI_COMM_WORLD)
 	, n_mpi_processes (Utilities::MPI::n_mpi_processes(mpi_communicator))
     , this_mpi_process (Utilities::MPI::this_mpi_process(mpi_communicator))
 	, pcout (std::cout, (this_mpi_process == 0))
 	, tria (mpi_communicator, Triangulation<dim>::maximum_smoothing)
+	, timer (mpi_communicator, pcout, TimerOutput::summary, TimerOutput::wall_times)
 {
 	this->femSolver = femSolver;
 	this->particleHandler = particleHandler;
+	this->parameterHandler = parameterHandler;
 	
-	parameterHandler.readParameters("input_data.prm");
+	parameterHandler->readParameters("input_data.prm");
 	
 	time = 0.0;
 	timestep_number = 1;
-    time_step = parameterHandler.getTimeStep();
-	final_time = parameterHandler.getFinalTime();
+    time_step = parameterHandler->getTimeStep();
+	final_time = parameterHandler->getFinalTime();
 
 	femSolver->setPfem2Solver(this);
-	particleHandler->setPfem2Solver(this);	
+	particleHandler->setPfem2Solver(this);
+}
+
+template<int dim>
+pfem2Solver<dim>::~pfem2Solver()
+{
 }
 
 template<int dim>
@@ -38,15 +46,21 @@ const parallel::distributed::Triangulation<dim>& pfem2Solver<dim>::getTriangulat
 }
 
 template <int dim>
-const pfem2Fem<dim> *pfem2Solver<dim>::getFemSolver() const
+const pfem2Fem<dim> &pfem2Solver<dim>::getFemSolver() const
 {
-    return femSolver;
+    return *femSolver;
 }
 
 template <int dim>
 const pfem2ParameterHandler<dim> &pfem2Solver<dim>::getParameterHandler() const
 {
-    return parameterHandler;
+    return *parameterHandler;
+}
+
+template <int dim>
+pfem2Fem<dim> &pfem2Solver<dim>::getFemSolver()
+{
+    return *femSolver;
 }
 
 template <int dim>
@@ -56,7 +70,7 @@ const ConditionalOStream &pfem2Solver<dim>::getPcout() const
 }
 
 template <int dim>
-const TimerOutput *pfem2Solver<dim>::getTimer() const
+TimerOutput &pfem2Solver<dim>::getTimer()
 {
     return timer;
 }
@@ -82,7 +96,7 @@ const int &pfem2Solver<dim>::getTimestepNumber() const
 template<int dim>
 void pfem2Solver<dim>::build_mesh(const std::string &filename, bool outputAfterBuild)
 {
-	TimerOutput::Scope timer_section(*timer, "Mesh import");
+	TimerOutput::Scope timer_section(timer, "Mesh import");
     
     //TO DO: check whether file exists
     
@@ -109,8 +123,6 @@ void pfem2Solver<dim>::build_mesh(const std::string &filename, bool outputAfterB
 template<int dim>
 void pfem2Solver<dim>::run()
 {
-	timer = new TimerOutput(mpi_communicator, pcout, TimerOutput::summary, TimerOutput::wall_times);
-
     if (this_mpi_process == 0){
 		system("rm solution-*");
 		system("rm particles-*");
@@ -123,7 +135,7 @@ void pfem2Solver<dim>::run()
 	particleHandler->seed_particles();
 	particleHandler->initialize_maps();
 
-	output_results(parameterHandler.getOutputParticles());
+	output_results(parameterHandler->getOutputParticles());
 
 	for (; time <= final_time; time += time_step, ++timestep_number) {
         pcout << std::endl << "Time step no. " << timestep_number << " at t = " << time << std::endl;
@@ -133,19 +145,17 @@ void pfem2Solver<dim>::run()
 		particleHandler->project_particle_fields();
     
 		femSolver->fem_step();
-        if(timestep_number % parameterHandler.getResultsOutputFrequency() == 0)
-			output_results(parameterHandler.getOutputParticles());
+        if(timestep_number % parameterHandler->getResultsOutputFrequency() == 0)
+			output_results(parameterHandler->getOutputParticles());
 
-        timer->print_summary();
+        timer.print_summary();
     }//time
-
-	delete timer;
 }
 
 template<int dim>
 void pfem2Solver<dim>::output_results(bool exportParticles, bool exportPrediction)
 {
-	TimerOutput::Scope timer_section(*timer, "Results output");
+	TimerOutput::Scope timer_section(timer, "Results output");
     
 	femSolver->output_fem_solution(timestep_number, exportPrediction);
 	if(exportParticles)

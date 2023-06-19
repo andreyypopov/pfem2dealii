@@ -60,16 +60,18 @@ public:
 	
 	void write_data(void* &data) const;
 	
-	double location[dim];
-	double reference_location[dim];
+	Point<dim> location;
+	Point<dim> reference_location;
 	unsigned int id;
 
 	int cell_dofs[GeometryInfo<dim>::vertices_per_cell];
 
 	int tria_position;
 
-	double velocity[dim];						 //!< Velocity transferred by the particle
-	double velocity_ext[dim];					 //!< Velocity for particle transport (external velocity)
+	Tensor<1,dim> velocity;						 //!< Velocity transferred by the particle
+	Tensor<1,dim> velocity_ext;					 //!< Velocity for particle transport (external velocity)
 };
+
+template class pfem2Particle<2>;
 
 #endif // PFEM2PARTICLE_H

@@ -11,6 +11,7 @@
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 
 #include "pfem2parameterhandler.h"
+#include "pfem2solver.h"
 
 template<int dim>
 pfem2Fem<dim>::pfem2Fem(const FE_Q<dim> *finite_element)
@@ -25,13 +26,27 @@ pfem2Fem<dim>::pfem2Fem(const FE_Q<dim> *finite_element)
 	, local_dof_indices (dofs_per_cell)
 	, solver_control (10000, 1e-7)
 {
-	for (int i = 0; i < dim; ++i)
+	for (int i = 0; i < dim; ++i){
 		local_matrixV[i] = FullMatrix<double>(dofs_per_cell);
+		local_rhsV[i] = Vector<double>(dofs_per_cell);
+	}
 
 	local_matrixP = FullMatrix<double>(dofs_per_cell);
+	local_rhsP = Vector<double>(dofs_per_cell);
 
-	this->trilinosSolver = TrilinosWrappers::SolverGMRES(solver_control);
+	this->trilinosSolver = new TrilinosWrappers::SolverGMRES(solver_control);
+	this->preconditionerV = new TrilinosWrappers::PreconditionJacobi;
+	this->preconditionerP = new TrilinosWrappers::PreconditionAMG;
+	
 	this->mainSolver = nullptr;
+}
+
+template<int dim>
+pfem2Fem<dim>::~pfem2Fem()
+{
+	delete trilinosSolver;	
+	delete preconditionerV;
+	delete preconditionerP;
 }
 
 template<int dim>
@@ -75,7 +90,7 @@ void pfem2Fem<dim>::setup_system()
 		locally_relevant_solutionV[i].reinit(locally_owned_dofs, locally_relevant_dofs, mainSolver->getCommunicator());
 		locally_relevant_old_solutionV[i].reinit(locally_owned_dofs, locally_relevant_dofs, mainSolver->getCommunicator());
 		locally_relevant_predictionV[i].reinit(locally_owned_dofs, locally_relevant_dofs, mainSolver->getCommunicator());
-		system_rV[i].reinit(locally_relevant_dofs, mainSolver->getCommunicator());
+		system_rV[i].reinit(locally_owned_dofs, mainSolver->getCommunicator());
 
 		DynamicSparsityPattern dspV(locally_relevant_dofs);
 
@@ -91,7 +106,7 @@ void pfem2Fem<dim>::setup_system()
 	//setup matrix and vectors for pressure field
 	locally_relevant_solutionP.reinit(locally_owned_dofs, locally_relevant_dofs, mainSolver->getCommunicator());
 	locally_relevant_old_solutionP.reinit(locally_owned_dofs, locally_relevant_dofs, mainSolver->getCommunicator());
-	system_rP.reinit(locally_relevant_dofs, mainSolver->getCommunicator());
+	system_rP.reinit(locally_owned_dofs, mainSolver->getCommunicator());
 
 	DynamicSparsityPattern dspP(locally_relevant_dofs);
 
@@ -129,14 +144,16 @@ void pfem2Fem<dim>::velocity_prediction_bc()
 
 	for(int i = 0; i < dim; ++i){
 		pressureGradient[i].reinit (locally_relevant_solutionP);
-		pressureGradient[i] = 0.0;
+		pressureGradient[i] = 0;
+		localPressureGradient[i].reinit (dofs_per_cell);
+		localPressureGradient[i] = 0;
 	}
 
 	if(timestep_number == 1){
 		velocityBcWeights.reinit (locally_relevant_solutionP);
-		velocityBcWeights = 0.0;
+		velocityBcWeights = 0;
 	}
-	
+
 	Tensor<1, dim> qPointPressureGradient;
 	double shapeValue;
 	
@@ -145,10 +162,11 @@ void pfem2Fem<dim>::velocity_prediction_bc()
 			for(int i = 0; i < dim; ++i)
 				localPressureGradient[i] = 0.0;
 			
-			localWeights = 0.0;
-						
+			if(timestep_number == 1)
+				localWeights = 0.0;
+								
 			for (unsigned int face_number = 0; face_number < GeometryInfo<dim>::faces_per_cell; ++face_number)
-				if(cell->face(face_number)->at_boundary() && mainSolver->getPressureDirichletBCpatchIDs().count(cell->face(face_number)->boundary_id())){
+				if(cell->face(face_number)->at_boundary() && mainSolver->getVelocityDirichletBCpatchIDs().count(cell->face(face_number)->boundary_id())){
 					fe_face_values.reinit (cell, face_number);
 					
 					for (unsigned int q_point = 0; q_point < n_face_q_points; ++q_point){
@@ -211,8 +229,8 @@ template <int dim>
 void pfem2Fem<dim>::assemble_velocity_prediction()
 {
 	for(int i = 0; i < dim; ++i){
-		system_mV[i] = 0.0;
-		system_rV[i] = 0.0;
+		system_mPredV[i] = 0;
+		system_rV[i] = 0;
 	}
 
 	double weight, aux;
@@ -227,7 +245,7 @@ void pfem2Fem<dim>::assemble_velocity_prediction()
 				local_matrixV[i] = 0.0;
 				local_rhsV[i] = 0.0;
 			}
-		
+
 			for (unsigned int q_index = 0; q_index < n_q_points; ++q_index) {
 				weight = fe_values.JxW (q_index);
 				
@@ -267,9 +285,9 @@ void pfem2Fem<dim>::assemble_velocity_prediction()
 					}//j
 				}//i
 			}//q_index
-			
+
 			for (unsigned int face_number = 0; face_number < GeometryInfo<dim>::faces_per_cell; ++face_number)
-				if (cell->face(face_number)->at_boundary() && mainSolver->getPressureDirichletBCpatchIDs().count(cell->face(face_number)->boundary_id())){
+				if (cell->face(face_number)->at_boundary() && mainSolver->getVelocityDirichletBCpatchIDs().count(cell->face(face_number)->boundary_id()) == 0){
 					fe_face_values.reinit (cell, face_number);
 					
 					if(dim == 2)
@@ -287,17 +305,17 @@ void pfem2Fem<dim>::assemble_velocity_prediction()
 									local_rhsV[1](i) += mu * time_step * fe_face_values.shape_value(i,q_point) *
 										fe_face_values.shape_grad(j,q_point)[1] * locally_relevant_solutionV[0](cell->vertex_dof_index(j,0)) *
 											fe_face_values.normal_vector(q_point)[0] * fe_face_values.JxW(q_point);
-								}
-						}
-				}		  
-		
+								}//j
+						}//q_point
+				}//if face->at_boundary()
+
 			cell->get_dof_indices (local_dof_indices);
 			for(int i = 0; i < dim; ++i)
-				constraintsPredV[i].distribute_local_to_global (local_matrixV[i], local_rhsV[i], local_dof_indices, system_mV[i], system_rV[i]);
+				constraintsPredV[i].distribute_local_to_global (local_matrixV[i], local_rhsV[i], local_dof_indices, system_mPredV[i], system_rV[i]);
 		}//cell
 
 	for(int i = 0; i < dim; ++i){
-		system_mV[i].compress (VectorOperation::add);
+		system_mPredV[i].compress (VectorOperation::add);
 		system_rV[i].compress (VectorOperation::add);
 	}
 }
@@ -338,8 +356,8 @@ void pfem2Fem<dim>::assemble_pressure_equation()
 						local_rhsP(i) += aux * locally_relevant_old_solutionP(jDoFindex);
 #endif
 						aux = 0.0;
-						for(int i = 0; i < dim; ++i)
-							aux += locally_relevant_predictionV[i](jDoFindex) * Nidx_pres[i];
+						for(int k = 0; k < dim; ++k)
+							aux += locally_relevant_predictionV[k](jDoFindex) * Nidx_pres[k];
 
 						local_rhsP(i) += coeff * aux * Nj_vel * weight;
 					}//j
@@ -347,16 +365,15 @@ void pfem2Fem<dim>::assemble_pressure_equation()
 			}//q_index
 
 			for (unsigned int face_number = 0; face_number < GeometryInfo<dim>::faces_per_cell; ++face_number)
-				if (cell->face(face_number)->at_boundary() && mainSolver->getPressureDirichletBCpatchIDs().count(cell->face(face_number)->boundary_id())){
+				if (cell->face(face_number)->at_boundary() && mainSolver->getPressureDirichletBCpatchIDs().count(cell->face(face_number)->boundary_id()) == 0){
 					fe_face_values.reinit (cell, face_number);
 
 					for (unsigned int q_point = 0; q_point < n_face_q_points; ++q_point){
-						Tensor<1,dim> V_q_point_value(0.0);
+						Tensor<1,dim> V_q_point_value;
 
 						for (unsigned int i = 0; i < dofs_per_cell; ++i)
 							for(int k = 0; k < dim; ++k)
 								V_q_point_value[k] += fe_face_values.shape_value(i, q_point) * locally_relevant_predictionV[k](cell->vertex_dof_index(i,0));
-
 						for (unsigned int i = 0; i < dofs_per_cell; ++i)
 							local_rhsP(i) -= coeff * fe_face_values.shape_value(i, q_point) * V_q_point_value *
 														fe_face_values.normal_vector(q_point) * fe_face_values.JxW(q_point);
@@ -395,7 +412,7 @@ void pfem2Fem<dim>::assemble_velocity_correction()
 				
 				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 					const Tensor<0,2> Ni_vel = fe_values.shape_value (i, q_index);
-					aux2 = mainSolver->getParameterHandler()->getTimeStep() * Ni_vel * weight;
+					aux2 = mainSolver->getParameterHandler().getTimeStep() * Ni_vel * weight;
 					
 					for (unsigned int j = 0; j < dofs_per_cell; ++j) {
 						jDoFindex = cell->vertex_dof_index(j,0);
@@ -455,8 +472,6 @@ void pfem2Fem<dim>::fem_step()
 template <int dim>
 void pfem2Fem<dim>::output_fem_solution(int timestep_number, bool exportPrediction)
 {
-	TimerOutput::Scope timer_section(mainSolver->getTimer(), "Results output");
-	
 	DataOut<dim> data_out;
 
 	data_out.attach_dof_handler (dof_handler);
@@ -504,18 +519,18 @@ void pfem2Fem<dim>::initialize_fem_solution()
 {
 	locally_relevant_solutionP = mainSolver ? mainSolver->getParameterHandler().getPressureInitialValue() : 0.0;
 	
-	const Tensor<1, dim> initialVelocity = mainSolver ? mainSolver->getParameterHandler().getVelocityInitialValue() : Tensor<1, dim>(0.0);
+	const Tensor<1, dim> initialVelocity = mainSolver ? mainSolver->getParameterHandler().getVelocityInitialValue() : Tensor<1, dim>();
 	for (int i = 0; i < dim; ++i)
 		locally_relevant_solutionV[i] = initialVelocity[i];
 }
 
 template <int dim>
-void pfem2Fem<dim>::setPfem2Solver(const pfem2Solver<dim> *mainSolver)
+void pfem2Fem<dim>::setPfem2Solver(pfem2Solver<dim> *mainSolver)
 {
 	this->mainSolver = mainSolver;
 	this->mu = mainSolver->getParameterHandler().getDynamicViscosity();
 	this->rho = mainSolver->getParameterHandler().getFluidDensity();
-	this->outerCorrections = mainSolver->getParameterHandler().getOuterCorrections();
+	this->outerCorrections = mainSolver->getParameterHandler().getOuterIterations();
 
 	dof_handler.reinit(mainSolver->getTriangulation());
 }
@@ -572,20 +587,24 @@ const IndexSet &pfem2Fem<dim>::getLocallyOwnedDofs() const
 template<int dim>
 void pfem2Fem<dim>::solve_velocity(bool correction)
 {
-	std::array<TrilinosWrappers::MPI::Vector, dim> completely_distributed_solution (locally_owned_dofs, mainSolver->getCommunicator());
+	std::array<TrilinosWrappers::MPI::Vector, dim> completely_distributed_solution;
+	for(int i = 0; i < dim; ++i)
+		completely_distributed_solution[i].reinit(locally_owned_dofs, mainSolver->getCommunicator());
     
-    if(correction) {
-		for(int i = 0; i < dim; ++i)
-			trilinosSolver.solve (system_mV[i], completely_distributed_solution[i], system_rV[i], preconditionerV[i]);
-	} else {
-		for(int i = 0; i < dim; ++i)
-			trilinosSolver.solve (system_mPredV[i], completely_distributed_solution[i], system_rV[i], preconditionerPredV[i]);
+    for(int i = 0; i < dim; ++i){
+		if(correction) {
+			static_cast<TrilinosWrappers::PreconditionJacobi*>(preconditionerV)->initialize (system_mV[i]);
+			trilinosSolver->solve (system_mV[i], completely_distributed_solution[i], system_rV[i], *preconditionerV);
+		} else {
+			static_cast<TrilinosWrappers::PreconditionJacobi*>(preconditionerV)->initialize (system_mPredV[i]);
+			trilinosSolver->solve (system_mPredV[i], completely_distributed_solution[i], system_rV[i], *preconditionerV);
+		}
+		
+		if(solver_control.last_check() == SolverControl::success)
+			mainSolver->getPcout() << "Solver for V (component " << i << ") converged with residual=" << solver_control.last_value() << ", no. of iterations=" << solver_control.last_step() << std::endl;
+		else
+			mainSolver->getPcout() << "Solver for V (component " << i << ") failed to converge" << std::endl;
 	}
-    
-    if(solver_control.last_check() == SolverControl::success)
-        mainSolver->getPcout() << "Solver for Vz converged with residual=" << solver_control.last_value() << ", no. of iterations=" << solver_control.last_step() << std::endl;
-    else
-		mainSolver->getPcout() << "Solver for Vz failed to converge" << std::endl;
     
     if (correction){
 		for(int i = 0; i < dim; ++i){
@@ -605,7 +624,8 @@ void pfem2Fem<dim>::solve_pressure()
 {
 	TrilinosWrappers::MPI::Vector completely_distributed_solution (locally_owned_dofs, mainSolver->getCommunicator());
     
-	trilinosSolver.solve (system_mP, completely_distributed_solution, system_rP, preconditionerP);		
+    static_cast<TrilinosWrappers::PreconditionAMG*>(preconditionerP)->initialize (system_mP);
+	trilinosSolver->solve (system_mP, completely_distributed_solution, system_rP, *preconditionerP);		
     
     if(solver_control.last_check() == SolverControl::success)
         mainSolver->getPcout() << "Solver for P converged with residual=" << solver_control.last_value() << ", no. of iterations=" << solver_control.last_step() << std::endl;
