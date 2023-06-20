@@ -75,4 +75,6 @@ bool compare_particle_association(const unsigned int a, const unsigned int b, co
 
 template class pfem2ParticleHandler<2>;
 
+template class pfem2ParticleHandler<3>;
+
 #endif // PFEM2PARTICLEHANDLER_H

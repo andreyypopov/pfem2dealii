@@ -74,4 +74,6 @@ public:
 
 template class pfem2Particle<2>;
 
+template class pfem2Particle<3>;
+
 #endif // PFEM2PARTICLE_H

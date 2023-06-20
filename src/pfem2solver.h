@@ -45,22 +45,22 @@ public:
 protected:
 	std::set<unsigned int> velocityDirichletBCpatchIDs;
 	std::set<unsigned int> pressureDirichletBCpatchIDs;
+
+	virtual void build_mesh (bool outputAfterBuild = false);
 	
 	pfem2ParameterHandler<dim> *parameterHandler;
 	pfem2Fem<dim> *femSolver;
 	pfem2ParticleHandler<dim> *particleHandler;
 
-private:
-	virtual void build_mesh (const std::string &filename, bool outputAfterBuild = false);
-	virtual void output_results(bool exportParticles, bool exportPrediction = false);
-	
 	MPI_Comm mpi_communicator;
 	const unsigned int n_mpi_processes;
 	const unsigned int this_mpi_process;
 	ConditionalOStream pcout;
-	TimerOutput timer;
-	
 	parallel::distributed::Triangulation<dim> tria;
+	TimerOutput timer;
+
+private:
+	virtual void output_results(bool exportParticles, bool exportPrediction = false);
 
 	double time, time_step, final_time;
 	int timestep_number;
@@ -70,5 +70,7 @@ private:
 };
 
 template class pfem2Solver<2>;
+
+template class pfem2Solver<3>;
 
 #endif // PFEM2SOLVER_H

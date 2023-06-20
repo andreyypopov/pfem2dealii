@@ -123,8 +123,8 @@ void pfem2Fem<dim>::setup_system()
 					for(int i = 0; i < dim; ++i)
 						velocityVector[i] = mainSolver->velocityDirichletBC(cell->face(face_number)->boundary_id(), i);
 					
-					velocityDirichletBoundaryDoFs[cell->face(face_number)->vertex_dof_index(0,0)] = velocityVector;
-					velocityDirichletBoundaryDoFs[cell->face(face_number)->vertex_dof_index(1,0)] = velocityVector;
+					for(int i = 0; i < GeometryInfo<dim>::vertices_per_face; ++i)
+						velocityDirichletBoundaryDoFs[cell->face(face_number)->vertex_dof_index(i,0)] = velocityVector;
 				}
 }
 
@@ -234,7 +234,7 @@ void pfem2Fem<dim>::assemble_velocity_prediction()
 	}
 
 	double weight, aux;
-	unsigned int jDoFindex;
+	unsigned int iDoFindex, jDoFindex;
 
 	const double time_step = mainSolver->getParameterHandler().getTimeStep();
 	
@@ -276,6 +276,19 @@ void pfem2Fem<dim>::assemble_velocity_prediction()
 							//explicit account for tau_ij
 							local_rhsV[0](i) -= aux * (Ni_vel_grad[1] * Nj_vel_grad[0] - 2.0/3.0 * Ni_vel_grad[0] * Nj_vel_grad[1]) * locally_relevant_solutionV[1](jDoFindex);
 							local_rhsV[1](i) -= aux * (Ni_vel_grad[0] * Nj_vel_grad[1] - 2.0/3.0 * Ni_vel_grad[1] * Nj_vel_grad[0]) * locally_relevant_solutionV[0](jDoFindex);
+						} else if(dim == 3){
+							//implicit account for tau_ij
+							local_matrixV[0](i,j) += aux * (4.0/3.0 * Ni_vel_grad[0] * Nj_vel_grad[0] + Ni_vel_grad[1] * Nj_vel_grad[1] + Ni_vel_grad[2] * Nj_vel_grad[2]);
+							local_matrixV[1](i,j) += aux * (Nj_vel_grad[0] * Ni_vel_grad[0] + 4.0/3.0 * Ni_vel_grad[1] * Nj_vel_grad[1] + Ni_vel_grad[2] * Nj_vel_grad[2]);
+							local_matrixV[2](i,j) += aux * (Nj_vel_grad[0] * Ni_vel_grad[0] + Nj_vel_grad[1] * Ni_vel_grad[1] + 4.0/3.0 * Ni_vel_grad[2] * Nj_vel_grad[2]);
+
+							//explicit account for tau_ij
+							local_rhsV[0](i) -= aux * ((Ni_vel_grad[1] * Nj_vel_grad[0] - 2.0/3.0 * Ni_vel_grad[0] * Nj_vel_grad[1]) * locally_relevant_solutionV[1](jDoFindex) +
+										(Ni_vel_grad[2] * Nj_vel_grad[0] - 2.0/3.0 * Ni_vel_grad[0] * Nj_vel_grad[2]) * locally_relevant_solutionV[2](jDoFindex));
+							local_rhsV[1](i) -= aux * ((Ni_vel_grad[0] * Nj_vel_grad[1] - 2.0/3.0 * Ni_vel_grad[1] * Nj_vel_grad[0]) * locally_relevant_solutionV[0](jDoFindex) +
+										(Ni_vel_grad[2] * Nj_vel_grad[1] - 2.0/3.0 * Ni_vel_grad[1] * Nj_vel_grad[2]) * locally_relevant_solutionV[2](jDoFindex));
+							local_rhsV[2](i) -= aux * ((Ni_vel_grad[0] * Nj_vel_grad[2] - 2.0/3.0 * Ni_vel_grad[2] * Nj_vel_grad[0]) * locally_relevant_solutionV[0](jDoFindex) +
+										(Ni_vel_grad[1] * Nj_vel_grad[2] - 2.0/3.0 * Ni_vel_grad[2] * Nj_vel_grad[1]) * locally_relevant_solutionV[1](jDoFindex));
 						}
 #ifdef SCHEMEB
 						aux = time_step * Ni_vel * locally_relevant_old_solutionP(jDoFindex) * weight;
@@ -290,7 +303,7 @@ void pfem2Fem<dim>::assemble_velocity_prediction()
 				if (cell->face(face_number)->at_boundary() && mainSolver->getVelocityDirichletBCpatchIDs().count(cell->face(face_number)->boundary_id()) == 0){
 					fe_face_values.reinit (cell, face_number);
 					
-					if(dim == 2)
+					if(dim == 2){
 						for (unsigned int q_point = 0; q_point < n_face_q_points; ++q_point){
 							for (unsigned int i = 0; i < dofs_per_cell; ++i)
 								for (unsigned int j = 0; j < dofs_per_cell; ++j){
@@ -307,6 +320,44 @@ void pfem2Fem<dim>::assemble_velocity_prediction()
 											fe_face_values.normal_vector(q_point)[0] * fe_face_values.JxW(q_point);
 								}//j
 						}//q_point
+					} else if(dim == 3){
+						for (unsigned int q_point = 0; q_point < n_face_q_points; ++q_point) {
+							Tensor<1,dim> tempX, tempY, tempZ;
+
+							weight = fe_face_values.JxW(q_point);
+
+							for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+								iDoFindex = cell->vertex_dof_index(i,0);
+								const Tensor<1,dim> Ni_vel_grad = fe_face_values.shape_grad (i, q_point);
+								Tensor<1,dim> velocity;
+								for(int j = 1; j < dim; ++j)
+									velocity[j] = locally_relevant_solutionV[j](iDoFindex);
+
+								tempX[0] += (4.0 / 3.0) * Ni_vel_grad[0] * velocity[0] - (2.0 / 3.0) * Ni_vel_grad[1] * velocity[1]
+										-(2.0 / 3.0) * Ni_vel_grad[2] * velocity[2];
+								tempX[1] += Ni_vel_grad[1] * velocity[0] + Ni_vel_grad[0] * velocity[1];
+								tempX[2] += Ni_vel_grad[2] * velocity[0] + Ni_vel_grad[0] * velocity[2];
+
+								tempY[0] += Ni_vel_grad[1] * velocity[0] + Ni_vel_grad[0] * velocity[1];
+								tempY[1] += (-2.0/3.0)*Ni_vel_grad[0] * velocity[0] + (4.0/3.0)*Ni_vel_grad[1] * velocity[1]
+										- (2.0/3.0)*Ni_vel_grad[2] * velocity[2];
+								tempY[2] += Ni_vel_grad[2] * velocity[1] + Ni_vel_grad[1] * velocity[2];
+
+								tempZ[0] += Ni_vel_grad[2] * velocity[0] + Ni_vel_grad[0] * velocity[2];
+								tempZ[1] += Ni_vel_grad[2] * velocity[1] + Ni_vel_grad[1] * velocity[2];
+								tempZ[2] += (-2.0/3.0)*Ni_vel_grad[0] * velocity[0] - (2.0/3.0)*Ni_vel_grad[1] * velocity[1]
+										+ (4.0/3.0)*Ni_vel_grad[2] * velocity[2];
+							}
+
+							for (unsigned int i = 0; i < dofs_per_cell; ++i){
+								aux = mu * time_step * fe_face_values.shape_value(i, q_point) * weight;
+
+								local_rhsV[0](i) += aux * tempX * fe_face_values.normal_vector(q_point);
+								local_rhsV[1](i) += aux * tempY * fe_face_values.normal_vector(q_point);
+								local_rhsV[2](i) += aux * tempZ * fe_face_values.normal_vector(q_point);
+							}
+						}
+					}
 				}//if face->at_boundary()
 
 			cell->get_dof_indices (local_dof_indices);
@@ -341,13 +392,13 @@ void pfem2Fem<dim>::assemble_pressure_equation()
 				weight = fe_values.JxW (q_index);
 				
 				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-					const Tensor<1,2> Nidx_pres = fe_values.shape_grad (i, q_index);
+					const Tensor<1,dim> Nidx_pres = fe_values.shape_grad (i, q_index);
 
 					for (unsigned int j = 0; j < dofs_per_cell; ++j) {
 						jDoFindex = cell->vertex_dof_index(j,0);
 						
-						const Tensor<0,2> Nj_vel = fe_values.shape_value (j, q_index);
-						const Tensor<1,2> Njdx_pres = fe_values.shape_grad (j, q_index);
+						const Tensor<0,dim> Nj_vel = fe_values.shape_value (j, q_index);
+						const Tensor<1,dim> Njdx_pres = fe_values.shape_grad (j, q_index);
 
 						aux = Nidx_pres * Njdx_pres * weight;
 						local_matrixP(i,j) += aux;
@@ -411,14 +462,14 @@ void pfem2Fem<dim>::assemble_velocity_correction()
 				weight = fe_values.JxW (q_index);
 				
 				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-					const Tensor<0,2> Ni_vel = fe_values.shape_value (i, q_index);
+					const Tensor<0,dim> Ni_vel = fe_values.shape_value (i, q_index);
 					aux2 = mainSolver->getParameterHandler().getTimeStep() * Ni_vel * weight;
 					
 					for (unsigned int j = 0; j < dofs_per_cell; ++j) {
 						jDoFindex = cell->vertex_dof_index(j,0);
 						
-						const Tensor<0,2> Nj_vel = fe_values.shape_value (j, q_index);
-						const Tensor<1,2> Nj_p_grad = fe_values.shape_grad (j, q_index);
+						const Tensor<0,dim> Nj_vel = fe_values.shape_value (j, q_index);
+						const Tensor<1,dim> Nj_p_grad = fe_values.shape_grad (j, q_index);
 
 						aux = rho * Ni_vel * Nj_vel * weight;
 						
@@ -647,6 +698,8 @@ void pfem2Fem<dim>::solve_pressure()
 template<int dim>
 void pfem2Fem<dim>:: calculate_loads(std::ostream &out)
 {
+	TimerOutput::Scope timer_section(mainSolver->getTimer(), "Loads calculation");
+
 	Tensor<1,dim> F_viscous, F_pressure, C_viscous, C_pressure;
 	double point_valueP, dVtdn, weight;
 

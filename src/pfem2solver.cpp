@@ -20,7 +20,7 @@ pfem2Solver<dim>::pfem2Solver(pfem2Fem<dim> *femSolver,
 	parameterHandler->readParameters("input_data.prm");
 	
 	time = 0.0;
-	timestep_number = 1;
+	timestep_number = 0;
     time_step = parameterHandler->getTimeStep();
 	final_time = parameterHandler->getFinalTime();
 	needLoadsCalculation = parameterHandler->getLoadsBoundaryID() != 0;
@@ -101,7 +101,7 @@ const bool &pfem2Solver<dim>::getNeedLoadsCalculation() const
 }
 
 template<int dim>
-void pfem2Solver<dim>::build_mesh(const std::string &filename, bool outputAfterBuild)
+void pfem2Solver<dim>::build_mesh(bool outputAfterBuild)
 {
 	TimerOutput::Scope timer_section(timer, "Mesh import");
     
@@ -109,7 +109,7 @@ void pfem2Solver<dim>::build_mesh(const std::string &filename, bool outputAfterB
     
     GridIn<dim> gridin;
     gridin.attach_triangulation(tria);
-    std::ifstream f(filename);
+    std::ifstream f(parameterHandler->getMeshFileName());
     gridin.read_unv(f);
     
     pcout << "Imported grid contains " << tria.n_cells() << " cells" << std::endl;
@@ -141,7 +141,7 @@ void pfem2Solver<dim>::run()
 		}
 	}
 
-	build_mesh(parameterHandler->getMeshFileName());
+	build_mesh();
 	femSolver->setup_system();
 	femSolver->initialize_fem_solution();
 
@@ -150,8 +150,8 @@ void pfem2Solver<dim>::run()
 
 	output_results(parameterHandler->getOutputParticles());
 
-	for (; time <= final_time; time += time_step, ++timestep_number) {
-        pcout << std::endl << "Time step no. " << timestep_number << " at t = " << time << std::endl;
+	for (; time <= final_time; time += time_step) {
+        pcout << std::endl << "Time step no. " << ++timestep_number << " at t = " << time << std::endl;
         
 		particleHandler->correct_particle_velocity();
 		particleHandler->move_particles();

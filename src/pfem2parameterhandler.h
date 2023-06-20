@@ -71,4 +71,6 @@ private:
 
 template class pfem2ParameterHandler<2>;
 
+template class pfem2ParameterHandler<3>;
+
 #endif // PFEM2PARAMETERHANDLER_H

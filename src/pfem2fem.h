@@ -125,4 +125,6 @@ private:
 
 template class pfem2Fem<2>;
 
+template class pfem2Fem<3>;
+
 #endif // PFEM2FEM_H
