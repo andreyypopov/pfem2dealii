@@ -33,6 +33,7 @@ public:
 	const std::set<unsigned int> &getVelocityDirichletBCpatchIDs() const;
 	const std::set<unsigned int> &getPressureDirichletBCpatchIDs() const;
 
+	const double& getTime() const;
 	const int& getTimestepNumber() const;
 
 	const bool& getNeedLoadsCalculation() const;

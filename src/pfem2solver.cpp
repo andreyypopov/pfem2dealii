@@ -89,6 +89,12 @@ const std::set<unsigned int> &pfem2Solver<dim>::getPressureDirichletBCpatchIDs()
 }
 
 template <int dim>
+const double &pfem2Solver<dim>::getTime() const
+{
+    return time;
+}
+
+template <int dim>
 const int &pfem2Solver<dim>::getTimestepNumber() const
 {
     return timestep_number;

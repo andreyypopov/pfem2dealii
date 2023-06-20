@@ -749,7 +749,7 @@ void pfem2Fem<dim>:: calculate_loads(std::ostream &out)
 		for(int i = 0; i < dim; ++i)
 			aerodynamicCoeffs[i] = global_coeffs[2 * i] + global_coeffs[2 * i + 1];
 
-		out << time;
+		out << mainSolver->getTime();
 		for(int i = 0; i < dim; ++i)
 			out << "," << aerodynamicCoeffs[i];
 
