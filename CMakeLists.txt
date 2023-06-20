@@ -20,6 +20,9 @@ add_library(pfem2dealii SHARED ${src_files})
 target_include_directories(pfem2dealii SYSTEM PUBLIC ${DEAL_II_INCLUDE_DIRS})
 target_link_libraries(pfem2dealii PUBLIC ${DEAL_II_LIBRARIES})
 
+add_subdirectory(utils/repairMesh)
+add_subdirectory(utils/repairMesh3D)
+
 install(TARGETS pfem2dealii)
 install(FILES ${header_files} DESTINATION include)
 
