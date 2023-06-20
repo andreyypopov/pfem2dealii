@@ -15,7 +15,7 @@ pfem2ParameterHandler<dim>::pfem2ParameterHandler()
 	, particleIntegrationSteps(5)
     , resultsOutputFrequency(10)
     , outputParticles(false)
-    , boundaryForForcesComputation(0)
+    , loadsBoundaryID(0)
 {
 	for (int i = 0; i < dim; ++i)
 		particlesPerCell[i] = 2;
@@ -68,9 +68,9 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 			prm.declare_entry ("Number of particles in the y direction", "2");
 		if (dim > 2)
 			prm.declare_entry ("Number of particles in the z direction", "2");
+		prm.declare_entry ("Maximum number of particles per cell part", "2");
+		prm.declare_entry ("Particle integration steps", "5");
 	}
-	prm.declare_entry ("Maximum number of particles per cell part", "2");
-	prm.declare_entry ("Particle integration steps", "5");
 	prm.leave_subsection();
 	
 	prm.enter_subsection("Input and output parameters");
@@ -78,10 +78,17 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 		prm.declare_entry ("Mesh file name", "");
 		prm.declare_entry ("Results output frequency", "10");
 		prm.declare_entry ("Output particles", "false");
-		prm.declare_entry ("Boundary id for forces computation", "0");
 	}
 	prm.leave_subsection();
 	
+	prm.enter_subsection("Loads calculation");
+	{
+		prm.declare_entry ("Boundary id", "0");
+		prm.declare_entry ("Thickness", "1.0");
+		prm.declare_entry ("Mean velocity", "1.0");
+	}
+	prm.leave_subsection();
+
 	//2. Parsing input file (undefined entries are allowed to be skipped)
 	prm.parse_input (filename, "", true);	
 	
@@ -126,9 +133,9 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 			particlesPerCell[1] = prm.get_integer("Number of particles in the y direction");
 		if (dim > 2)
 			particlesPerCell[2] = prm.get_integer("Number of particles in the z direction");
+		maxParticlesPerCellPart = prm.get_integer ("Maximum number of particles per cell part");
+		particleIntegrationSteps = prm.get_integer ("Particle integration steps");
 	}
-	maxParticlesPerCellPart = prm.get_integer ("Maximum number of particles per cell part");
-	particleIntegrationSteps = prm.get_integer ("Particle integration steps");
 	prm.leave_subsection();
 	
 	prm.enter_subsection("Input and output parameters");
@@ -136,7 +143,14 @@ void pfem2ParameterHandler<dim>::readParameters(const std::string& filename)
 		meshFileName = prm.get("Mesh file name");
 		resultsOutputFrequency = prm.get_integer("Results output frequency");
 		outputParticles = prm.get_bool("Output particles");
-		boundaryForForcesComputation = prm.get_integer("Boundary id for forces computation");
+	}
+	prm.leave_subsection();
+
+	prm.enter_subsection("Loads calculation");
+	{
+		loadsBoundaryID = prm.get_integer("Boundary id");
+		thickness = prm.get_double("Thickness");
+		meanVelocity = prm.get_double("Mean velocity");
 	}
 	prm.leave_subsection();
 }
@@ -226,9 +240,21 @@ const bool &pfem2ParameterHandler<dim>::getOutputParticles() const
 }
 
 template <int dim>
-const unsigned int &pfem2ParameterHandler<dim>::getBoundaryForForcesComputation() const
+const unsigned int &pfem2ParameterHandler<dim>::getLoadsBoundaryID() const
 {
-    return boundaryForForcesComputation;
+    return loadsBoundaryID;
+}
+
+template <int dim>
+const double &pfem2ParameterHandler<dim>::getThickness() const
+{
+    return thickness;
+}
+
+template <int dim>
+const double &pfem2ParameterHandler<dim>::getMeanVelocity() const
+{
+    return meanVelocity;
 }
 
 template <int dim>

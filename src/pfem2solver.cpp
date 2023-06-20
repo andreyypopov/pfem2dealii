@@ -23,6 +23,7 @@ pfem2Solver<dim>::pfem2Solver(pfem2Fem<dim> *femSolver,
 	timestep_number = 1;
     time_step = parameterHandler->getTimeStep();
 	final_time = parameterHandler->getFinalTime();
+	needLoadsCalculation = parameterHandler->getLoadsBoundaryID() != 0;
 
 	femSolver->setPfem2Solver(this);
 	particleHandler->setPfem2Solver(this);
@@ -93,6 +94,12 @@ const int &pfem2Solver<dim>::getTimestepNumber() const
     return timestep_number;
 }
 
+template <int dim>
+const bool &pfem2Solver<dim>::getNeedLoadsCalculation() const
+{
+    return needLoadsCalculation;
+}
+
 template<int dim>
 void pfem2Solver<dim>::build_mesh(const std::string &filename, bool outputAfterBuild)
 {
@@ -124,8 +131,14 @@ template<int dim>
 void pfem2Solver<dim>::run()
 {
     if (this_mpi_process == 0){
-		system("rm solution-*");
-		system("rm particles-*");
+		system("rm solution*vtu");
+		system("rm particles*vtu");
+
+		if(needLoadsCalculation){
+			forcesFile.open("forces.csv");
+			if(dim == 2)
+				forcesFile << "t,Cx,Cy,Cx_nu,Cx_p,Cy_nu,Cy_p" << std::endl;
+		}
 	}
 
 	build_mesh(parameterHandler->getMeshFileName());
@@ -148,8 +161,16 @@ void pfem2Solver<dim>::run()
         if(timestep_number % parameterHandler->getResultsOutputFrequency() == 0)
 			output_results(parameterHandler->getOutputParticles());
 
+		if(needLoadsCalculation)
+			femSolver->calculate_loads(forcesFile);
+
         timer.print_summary();
     }//time
+
+    if(this_mpi_process == 0 && needLoadsCalculation){
+		forcesFile.flush();
+		forcesFile.close();
+	}
 }
 
 template<int dim>

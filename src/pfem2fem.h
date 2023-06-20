@@ -38,6 +38,8 @@ public:
 	virtual void fem_step();
 	virtual void output_fem_solution(int timestep_number, bool exportPrediction = false);
 
+	virtual void calculate_loads(std::ostream &out);
+
 	void setPfem2Solver(pfem2Solver<dim>* mainSolver);
 
 	const DoFHandler<dim> &getDoFhandler() const;
@@ -113,6 +115,11 @@ private:
 	double rho;
 	unsigned int outerCorrections;
 	
+	//loads calculation parameters
+	unsigned int loadsBoundaryID;
+	double thickness;
+	double meanVelocity;
+
 	pfem2Solver<dim>* mainSolver;
 };
 

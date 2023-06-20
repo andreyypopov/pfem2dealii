@@ -527,10 +527,18 @@ void pfem2Fem<dim>::initialize_fem_solution()
 template <int dim>
 void pfem2Fem<dim>::setPfem2Solver(pfem2Solver<dim> *mainSolver)
 {
+	const auto& paramHandler = mainSolver->getParameterHandler();
+
 	this->mainSolver = mainSolver;
-	this->mu = mainSolver->getParameterHandler().getDynamicViscosity();
-	this->rho = mainSolver->getParameterHandler().getFluidDensity();
-	this->outerCorrections = mainSolver->getParameterHandler().getOuterIterations();
+	this->mu = paramHandler.getDynamicViscosity();
+	this->rho = paramHandler.getFluidDensity();
+	this->outerCorrections = paramHandler.getOuterIterations();
+
+	if(mainSolver->getNeedLoadsCalculation()){
+		this->loadsBoundaryID = paramHandler.getLoadsBoundaryID();
+		this->thickness = paramHandler.getThickness();
+		this->meanVelocity = paramHandler.getMeanVelocity();
+	}
 
 	dof_handler.reinit(mainSolver->getTriangulation());
 }
@@ -634,4 +642,67 @@ void pfem2Fem<dim>::solve_pressure()
     
 	constraintsP.distribute (completely_distributed_solution);
 	locally_relevant_solutionP = completely_distributed_solution;
+}
+
+template<int dim>
+void pfem2Fem<dim>:: calculate_loads(std::ostream &out)
+{
+	Tensor<1,dim> F_viscous, F_pressure, C_viscous, C_pressure;
+	double point_valueP, dVtdn, weight;
+
+	for(const auto &cell : dof_handler.active_cell_iterators())
+		if(cell->is_locally_owned())
+			for (unsigned int face_number=0; face_number < GeometryInfo<dim>::faces_per_cell; ++face_number)
+				if (cell->face(face_number)->at_boundary() && cell->face(face_number)->boundary_id() == loadsBoundaryID) {
+					fe_face_values.reinit (cell, face_number);
+
+					//for 2D only
+					for (unsigned int q_point = 0; q_point < n_face_q_points; ++q_point) {
+						point_valueP = 0.0;
+						dVtdn = 0.0;
+
+						weight = fe_face_values.JxW (q_point);
+
+						for (unsigned int vertex=0; vertex<GeometryInfo<dim>::vertices_per_cell; ++vertex){
+							point_valueP += locally_relevant_solutionP(cell->vertex_dof_index(vertex,0)) * fe_face_values.shape_value(vertex, q_point);
+							dVtdn += (locally_relevant_solutionV[0](cell->vertex_dof_index(vertex,0)) * fe_face_values.normal_vector(q_point)[1] - locally_relevant_solutionV[1](cell->vertex_dof_index(vertex,0)) * fe_face_values.normal_vector(q_point)[0]) *
+									(fe_face_values.shape_grad(vertex, q_point)[0] * fe_face_values.normal_vector(q_point)[0] + fe_face_values.shape_grad(vertex, q_point)[1] * fe_face_values.normal_vector(q_point)[1]);
+						}//vertex
+
+						F_viscous[0] += mu * dVtdn * fe_face_values.normal_vector(q_point)[1] * weight;
+						F_pressure[0] -= point_valueP * fe_face_values.normal_vector(q_point)[0] * weight;
+						F_viscous[1] -= mu * dVtdn * fe_face_values.normal_vector(q_point)[0] * weight;
+						F_pressure[1] -= point_valueP * fe_face_values.normal_vector(q_point)[1] * weight;
+					}//q_index
+				}//if
+
+	double coeff = 2.0 / (rho * meanVelocity * meanVelocity * thickness);
+	for(int i = 0; i < dim; ++i){
+		C_viscous[i] = coeff * F_viscous[i];
+		C_pressure[i] = coeff * F_pressure[i];
+	}
+
+	double local_coeffs[2 * dim];
+	double global_coeffs[2 * dim];
+	for(int i = 0; i < dim; ++i){
+		local_coeffs[2 * i] = C_viscous[i];
+		local_coeffs[2 * i + 1] = C_pressure[i];
+	}
+
+	Utilities::MPI::sum(local_coeffs, mainSolver->getCommunicator(), global_coeffs);
+
+	if (Utilities::MPI::this_mpi_process(mainSolver->getCommunicator()) == 0){
+		Tensor<1,dim> aerodynamicCoeffs;
+		for(int i = 0; i < dim; ++i)
+			aerodynamicCoeffs[i] = global_coeffs[2 * i] + global_coeffs[2 * i + 1];
+
+		out << time;
+		for(int i = 0; i < dim; ++i)
+			out << "," << aerodynamicCoeffs[i];
+
+		for(int i = 0; i < dim; ++i)
+			out << "," << global_coeffs[2 * i] << "," << global_coeffs[2 * i + 1];
+
+		out << std::endl;
+	}
 }

@@ -31,7 +31,12 @@ subsection Input and output parameters
 	set Mesh file name = airfoilMeshFine.unv
 	set Results output frequency = 100
 	set Output particles = false
-	set Boundary id for forces computation = 3
+end
+
+subsection Loads calculation
+	set Boundary id = 3
+	set Thickness = 1.0
+	set Mean velocity = 10.0
 end
 
 subsection Free-stream flow

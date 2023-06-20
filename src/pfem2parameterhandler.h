@@ -31,7 +31,9 @@ public:
     const std::string& getMeshFileName() const;
     const unsigned int& getResultsOutputFrequency() const;
     const bool& getOutputParticles() const;
-    const unsigned int& getBoundaryForForcesComputation() const;
+    const unsigned int& getLoadsBoundaryID() const;
+    const double& getThickness() const;
+    const double& getMeanVelocity() const;
 
 private:
     //fluid properties
@@ -60,7 +62,11 @@ private:
     std::string meshFileName;
     unsigned int resultsOutputFrequency;
     bool outputParticles;
-    unsigned int boundaryForForcesComputation;
+
+    //loads calculation
+    unsigned int loadsBoundaryID;
+    double thickness;
+    double meanVelocity;
 };
 
 template class pfem2ParameterHandler<2>;

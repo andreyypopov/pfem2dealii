@@ -35,6 +35,8 @@ public:
 
 	const int& getTimestepNumber() const;
 
+	const bool& getNeedLoadsCalculation() const;
+
 	virtual const double velocityDirichletBC(unsigned int boundaryID, unsigned int component = 0) const = 0;
 	virtual const double pressureDirichletBC(unsigned int boundaryID) const = 0;
 	
@@ -62,6 +64,9 @@ private:
 
 	double time, time_step, final_time;
 	int timestep_number;
+
+	bool needLoadsCalculation;
+	std::ofstream forcesFile;
 };
 
 template class pfem2Solver<2>;
