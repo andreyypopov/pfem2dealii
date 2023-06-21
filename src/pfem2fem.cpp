@@ -61,29 +61,10 @@ void pfem2Fem<dim>::setup_system()
     DoFTools::extract_locally_relevant_dofs (dof_handler, locally_relevant_dofs);
 
     //setup constraints for boundary conditions for velocity field
-	for(int i = 0; i < dim; ++i){
-		constraintsPredV[i].clear ();
-    	constraintsPredV[i].reinit (locally_relevant_dofs);
-    	DoFTools::make_hanging_node_constraints(dof_handler, constraintsPredV[i]);
-		for(unsigned int boundaryID : mainSolver->getVelocityDirichletBCpatchIDs())
-			VectorTools::interpolate_boundary_values (dof_handler, boundaryID, ConstantFunction<dim>(mainSolver->velocityDirichletBC(boundaryID, i)), constraintsPredV[i]);
-		constraintsPredV[i].close ();
-
-		constraintsV[i].clear ();
-    	constraintsV[i].reinit (locally_relevant_dofs);
-    	DoFTools::make_hanging_node_constraints(dof_handler, constraintsV[i]);
-		for(unsigned int boundaryID : mainSolver->getVelocityDirichletBCpatchIDs())
-			VectorTools::interpolate_boundary_values (dof_handler, boundaryID, ConstantFunction<dim>(mainSolver->velocityDirichletBC(boundaryID, i)), constraintsV[i]);
-		constraintsV[i].close ();
-	}
+	setup_velocity_constraints();
 
 	//setup constraints for boundary conditions for pressure field
-	constraintsP.clear ();
-    constraintsP.reinit (locally_relevant_dofs);
-    DoFTools::make_hanging_node_constraints(dof_handler, constraintsP);
-	for(unsigned int boundaryID : mainSolver->getPressureDirichletBCpatchIDs())
-		VectorTools::interpolate_boundary_values (dof_handler, boundaryID, ConstantFunction<dim>(mainSolver->pressureDirichletBC(boundaryID)), constraintsP);
-	constraintsP.close ();
+	setup_pressure_constraints();
 
 	//setup matrices and vectors for velocity field
 	for(int i = 0; i < dim; ++i){
@@ -115,6 +96,43 @@ void pfem2Fem<dim>::setup_system()
 	system_mP.reinit (locally_owned_dofs, locally_owned_dofs, dspP, mainSolver->getCommunicator());
 
 	//fill the list of boundary DoFs where Dirichlet conditions are set for the velocity field (number of DoF + velocity BC vector)
+	fill_velocity_boundary_dofs_list();
+}
+
+template<int dim>
+void pfem2Fem<dim>::setup_velocity_constraints()
+{
+	for(int i = 0; i < dim; ++i){
+		constraintsPredV[i].clear ();
+    	constraintsPredV[i].reinit (locally_relevant_dofs);
+    	DoFTools::make_hanging_node_constraints(dof_handler, constraintsPredV[i]);
+		for(unsigned int boundaryID : mainSolver->getVelocityDirichletBCpatchIDs())
+			VectorTools::interpolate_boundary_values (dof_handler, boundaryID, ConstantFunction<dim>(mainSolver->velocityDirichletBC(boundaryID, i)), constraintsPredV[i]);
+		constraintsPredV[i].close ();
+
+		constraintsV[i].clear ();
+    	constraintsV[i].reinit (locally_relevant_dofs);
+    	DoFTools::make_hanging_node_constraints(dof_handler, constraintsV[i]);
+		for(unsigned int boundaryID : mainSolver->getVelocityDirichletBCpatchIDs())
+			VectorTools::interpolate_boundary_values (dof_handler, boundaryID, ConstantFunction<dim>(mainSolver->velocityDirichletBC(boundaryID, i)), constraintsV[i]);
+		constraintsV[i].close ();
+	}
+}
+
+template<int dim>
+void pfem2Fem<dim>::setup_pressure_constraints()
+{
+	constraintsP.clear ();
+    constraintsP.reinit (locally_relevant_dofs);
+    DoFTools::make_hanging_node_constraints(dof_handler, constraintsP);
+	for(unsigned int boundaryID : mainSolver->getPressureDirichletBCpatchIDs())
+		VectorTools::interpolate_boundary_values (dof_handler, boundaryID, ConstantFunction<dim>(mainSolver->pressureDirichletBC(boundaryID)), constraintsP);
+	constraintsP.close ();
+}
+
+template<int dim>
+void pfem2Fem<dim>::fill_velocity_boundary_dofs_list()
+{
 	for(const auto &cell : dof_handler.active_cell_iterators())
 		if(cell->is_locally_owned())
 			for (unsigned int face_number = 0; face_number < GeometryInfo<dim>::faces_per_cell; ++face_number)

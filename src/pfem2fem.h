@@ -34,6 +34,10 @@ public:
 	virtual ~pfem2Fem();
 
 	virtual void setup_system();
+	virtual void setup_velocity_constraints();
+	virtual void setup_pressure_constraints();
+	virtual void fill_velocity_boundary_dofs_list();
+
 	virtual void initialize_fem_solution();
 	virtual void fem_step();
 	virtual void output_fem_solution(int timestep_number, bool exportPrediction = false);
@@ -54,7 +58,7 @@ public:
 	const unsigned int &getDofsPerCell() const;
 	const IndexSet &getLocallyOwnedDofs() const;
 
-private:
+protected:
 	virtual void velocity_prediction_bc();
 	virtual void assemble_velocity_prediction();
 	virtual void assemble_pressure_equation();
@@ -62,9 +66,8 @@ private:
 
 	void solve_velocity(bool correction = false);
 	void solve_pressure();
-	
-	DoFHandler<dim> dof_handler;
 
+	DoFHandler<dim> dof_handler;
 	QGauss<dim> quadrature_formula;
 	QGauss<dim-1> face_quadrature_formula;
 
@@ -106,6 +109,9 @@ private:
 	AffineConstraints<double> constraintsP;
 	std::array<AffineConstraints<double>, dim> constraintsV;
 	
+	pfem2Solver<dim>* mainSolver;
+
+private:
 	SolverControl solver_control;
 	TrilinosWrappers::SolverBase *trilinosSolver;
 	TrilinosWrappers::PreconditionBase *preconditionerV;
@@ -119,8 +125,6 @@ private:
 	unsigned int loadsBoundaryID;
 	double thickness;
 	double meanVelocity;
-
-	pfem2Solver<dim>* mainSolver;
 };
 
 template class pfem2Fem<2>;
