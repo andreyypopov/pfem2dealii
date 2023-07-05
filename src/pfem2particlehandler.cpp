@@ -44,36 +44,10 @@ void pfem2ParticleHandler<dim>::seed_particles()
 {
     TimerOutput::Scope timer_section(mainSolver->getTimer(), "Particle seeding");
     
-    quantities = mainSolver->getParameterHandler().getParticlesPerCell();
-    
     //generate possible combinations of indices for cell parts within a single cell
-    int cellPartsCount = 1;
-    for(int i = 0; i < dim; ++i)
-        cellPartsCount *= quantities[i];
-        
-    cellPartsIndices.reserve(cellPartsCount);  
-    std::array<int, dim> cellPartIndex;
-    for(int i = 0; i < quantities[0]; ++i){
-        cellPartIndex[0] = i;
+    fill_cell_parts_indices();
 
-        if(dim > 1){
-            for(int j = 0; j < quantities[1]; ++j){
-                cellPartIndex[1] = j;
-
-                if(dim > 2)
-                    for(int k = 0; k < quantities[2]; ++k){
-                        cellPartIndex[2] = k;
-                        cellPartsIndices.push_back(cellPartIndex);
-					}
-				else
-					cellPartsIndices.push_back(cellPartIndex);
-            }
-		}
-		else
-			cellPartsIndices.push_back(cellPartIndex);
-    }
-
-    particles.reserve(cellPartsCount * mainSolver->getTriangulation().n_active_cells());
+    particles.reserve(cellPartsIndices.size() * mainSolver->getTriangulation().n_active_cells());
     const auto& solutionV = mainSolver->getFemSolver().getSolutionV();
     double shapeValue;
     
@@ -86,9 +60,9 @@ void pfem2ParticleHandler<dim>::seed_particles()
             for(const auto& index : cellPartsIndices){
                 Point<dim> newPoint;
                 for(int i = 0; i < dim; ++i)
-                    newPoint[i] = (index[i] + 1.0 / 2) * h[i];
+                    newPoint[i] = (index[i] + 0.5) * h[i];
                     
-                pfem2Particle particle(mapping.transform_unit_to_real_cell(cell, newPoint), newPoint, ++particleCount);
+                pfem2Particle<dim> particle(mapping.transform_unit_to_real_cell(cell, newPoint), newPoint, ++particleCount);
                 particle.set_cell_dofs(cell);
 
                 Tensor<1,dim> newVelocity;
@@ -97,7 +71,7 @@ void pfem2ParticleHandler<dim>::seed_particles()
                     shapeValue = feq->shape_value(vertex, particle.get_reference_location());
 
                     for(int i = 0; i < dim; ++i)
-                        newVelocity[i] += shapeValue * solutionV[i](particle.cell_dofs[vertex]);
+                        newVelocity[i] += shapeValue * solutionV[i](particle.get_cell_dof(vertex));
                 }
 
                 particle.set_velocity(newVelocity);
@@ -131,7 +105,7 @@ void pfem2ParticleHandler<dim>::correct_particle_velocity()
             shapeValue = feq->shape_value(vertex, particleIndex.get_reference_location());
 
             for(int i = 0; i < dim; ++i)
-                velocityCorr[i] += shapeValue * deltaV[i](particleIndex.cell_dofs[vertex]);
+                velocityCorr[i] += shapeValue * deltaV[i](particleIndex.get_cell_dof(vertex));
         }
 
         particleIndex.set_velocity(particleIndex.get_velocity() + velocityCorr);
@@ -155,7 +129,7 @@ void pfem2ParticleHandler<dim>::move_particles()
                 shapeValue = feq->shape_value(vertex, particleIndex.get_reference_location());
 
                 for(int i = 0; i < dim; ++i)
-                    particleTransportVel[i] += shapeValue * solutionV[i](particleIndex.cell_dofs[vertex]);
+                    particleTransportVel[i] += shapeValue * solutionV[i](particleIndex.get_cell_dof(vertex));
             }
 
             particleIndex.set_velocity_ext(particleTransportVel);
@@ -193,9 +167,9 @@ void pfem2ParticleHandler<dim>::project_particle_fields()
             shapeValue = feq->shape_value(vertex, particleIndex.get_reference_location());
 
             for(int i = 0; i < dim; ++i)
-                nodeVelocity[i][particleIndex.cell_dofs[vertex]] += shapeValue * particleIndex.get_velocity_component(i);
+                nodeVelocity[i][particleIndex.get_cell_dof(vertex)] += shapeValue * particleIndex.get_velocity_component(i);
 
-            nodeWeights[particleIndex.cell_dofs[vertex]] += shapeValue;
+            nodeWeights[particleIndex.get_cell_dof(vertex)] += shapeValue;
         }
         
 
@@ -357,14 +331,14 @@ void pfem2ParticleHandler<dim>::check_particle_distribution(const DoFHandler<dim
 {
     const auto& triangulation = mainSolver->getTriangulation();
 
-    std::map<int, std::map<std::array<int, dim>, int>> particlesInCellParts;
+    std::map<int, std::map<std::array<unsigned int, dim>, int>> particlesInCellParts;
 
     double h[dim];
     for(int i = 0; i < dim; ++i)
         h[i] = 1.0 / quantities[i];
 
     //1. Get information about particle distribution within cells (per each cell part) and delete excessive particles
-    std::array<int, dim> particleCellPart;
+    std::array<unsigned int, dim> particleCellPart;
     for(auto particleIndex = particles.begin(); particleIndex != particles.end(); ){
         for(int i = 0; i < dim; ++i)
             particleCellPart[i] = particleIndex->get_reference_location()[i] / h[i];
@@ -381,17 +355,17 @@ void pfem2ParticleHandler<dim>::check_particle_distribution(const DoFHandler<dim
     //2. Add a particle in each empty cell part
     const auto& solutionV = mainSolver->getFemSolver().getSolutionV();
     double shapeValue;
-    
+
     for(auto& cellInfo : particlesInCellParts){
         const typename DoFHandler<dim>::cell_iterator dofCell(&triangulation, triangulation.n_levels() - 1, cellInfo.first, &dof_handler);
-        
+
         for(const auto& cellPartIndex : cellPartsIndices)
             if(cellInfo.second[cellPartIndex] == 0){
                 Point<dim> newPoint;
                 for(int i = 0; i < dim; ++i)
-                    newPoint[i] = (cellPartIndex[i] + 1.0 / 2) * h[i];
+                    newPoint[i] = (cellPartIndex[i] + 0.5) * h[i];
                 
-                pfem2Particle particle(mapping.transform_unit_to_real_cell(dofCell, newPoint), newPoint, ++particleCount);
+                pfem2Particle<dim> particle(mapping.transform_unit_to_real_cell(dofCell, newPoint), newPoint, ++particleCount);
                 particle.set_cell_dofs(dofCell);
 
                 Tensor<1,dim> newVelocity;
@@ -400,13 +374,47 @@ void pfem2ParticleHandler<dim>::check_particle_distribution(const DoFHandler<dim
                     shapeValue = feq->shape_value(vertex, particle.get_reference_location());
 
                     for(int i = 0; i < dim; ++i)
-                        newVelocity[i] += shapeValue * solutionV[i](particle.cell_dofs[vertex]);
+                        newVelocity[i] += shapeValue * solutionV[i](particle.get_cell_dof(vertex));
                 }
 
                 particle.set_velocity(newVelocity);
                 insert_particle(particle, dofCell);
             }
     }
+}
+
+template<int dim>
+unsigned int pfem2ParticleHandler<dim>::fill_cell_parts_indices()
+{
+	quantities = mainSolver->getParameterHandler().getParticlesPerCell();
+
+    int cellPartsCount = 1;
+    for(int i = 0; i < dim; ++i)
+        cellPartsCount *= quantities[i];
+
+    cellPartsIndices.reserve(cellPartsCount);
+    std::array<unsigned int, dim> cellPartIndex;
+    for(int i = 0; i < quantities[0]; ++i){
+        cellPartIndex[0] = i;
+
+        if(dim > 1){
+            for(int j = 0; j < quantities[1]; ++j){
+                cellPartIndex[1] = j;
+
+                if(dim > 2)
+                    for(int k = 0; k < quantities[2]; ++k){
+                        cellPartIndex[2] = k;
+                        cellPartsIndices.push_back(cellPartIndex);
+					}
+				else
+					cellPartsIndices.push_back(cellPartIndex);
+            }
+		}
+		else
+			cellPartsIndices.push_back(cellPartIndex);
+    }
+
+    return cellPartsIndices.size();
 }
 
 template<int dim>

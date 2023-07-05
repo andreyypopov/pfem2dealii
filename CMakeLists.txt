@@ -1,22 +1,42 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.7.1)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
 
 include(CMakePrintHelpers)
 
-PROJECT(pfem2dealii DESCRIPTION "The pfem2dealii library")
+PROJECT(pfem2dealii DESCRIPTION "The pfem2dealii library" LANGUAGES CXX)
 SET(PROJECT_NAME "pfem2dealii")
-SET(PROJECT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+SET(PROJECT_ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
-INCLUDE(${PROJECT_PATH}/cmake/setup_deal_ii.cmake)
+INCLUDE(${PROJECT_ROOT_PATH}/cmake/setup_deal_ii.cmake)
+INCLUDE(${PROJECT_ROOT_PATH}/cmake/functions.cmake)
 
-file(GLOB src_files ${PROJECT_PATH}/src/*.cpp)
-file(GLOB header_files ${PROJECT_PATH}/src/*.h)
+file(GLOB src_files ${PROJECT_ROOT_PATH}/src/*.cpp)
+file(GLOB header_files ${PROJECT_ROOT_PATH}/src/*.h)
 
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-	set(CMAKE_INSTALL_PREFIX "${PROJECT_PATH}/install" CACHE PATH "..." FORCE)
+	set(CMAKE_INSTALL_PREFIX "${PROJECT_ROOT_PATH}/install" CACHE PATH "..." FORCE)
 endif()
 
-add_library(pfem2dealii SHARED ${src_files})
+add_library(pfem2dealii SHARED)
 
+option(WITH_CUDA "Build with CUDA support" OFF)
+if (WITH_CUDA)
+	setup_cuda(${PROJECT_NAME})
+endif()
+
+option(SCHEME_B "Numerical scheme with explicit account for pressure" OFF)
+if (SCHEME_B)
+	add_definitions(-DSCHEMEB)
+endif()
+
+if (WITH_CUDA)
+	file(GLOB cuda_files ${PROJECT_ROOT_PATH}/src/cuda/*.cu)
+	file(GLOB cuda_header_files ${PROJECT_ROOT_PATH}/src/cuda/*.cuh)
+else()
+	set(cuda_files "")
+	set(cuda_header_files "")
+endif()
+
+target_sources(pfem2dealii PUBLIC ${src_files} ${cuda_files})
 target_include_directories(pfem2dealii SYSTEM PUBLIC ${DEAL_II_INCLUDE_DIRS})
 target_link_libraries(pfem2dealii PUBLIC ${DEAL_II_LIBRARIES})
 

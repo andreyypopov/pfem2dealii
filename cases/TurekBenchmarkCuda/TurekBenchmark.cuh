@@ -1,5 +1,5 @@
 #include "../../src/pfem2solver.h"
-#include "../../src/pfem2fem.h"
+#include "../../src/cuda/cudapfem2fem.cuh"
 
 class parabolicBC : public Function<2>
 {
@@ -9,7 +9,7 @@ public:
 	virtual double value (const Point<2> &p, const unsigned int component = 0) const;
 };
 
-class TurekBenchmarkFemSolver : public pfem2Fem<2>
+class TurekBenchmarkFemSolver : public cudaPfem2Fem<2>
 {
 public:
 	TurekBenchmarkFemSolver(const FE_Q<2> *finite_element);

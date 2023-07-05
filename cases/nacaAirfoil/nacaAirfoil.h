@@ -21,8 +21,8 @@ public:
 	nacaAirfoilSolver(pfem2Fem<2> *femSolver,
 		pfem2ParticleHandler<2> *particleHandler, pfem2ParameterHandler<2> *parameterHandler);
 
-	virtual const double velocityDirichletBC(unsigned int boundaryID, unsigned int component = 0) const override;
-	virtual const double pressureDirichletBC(unsigned int boundaryID) const override;
+	virtual double velocityDirichletBC(unsigned int boundaryID, unsigned int component = 0) const override;
+	virtual double pressureDirichletBC(unsigned int boundaryID) const override;
 	
 	void setFreeStreamParameters();
 	

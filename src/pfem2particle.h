@@ -8,15 +8,6 @@
 
 using namespace dealii;
 
-#ifdef WITH_CUDA
-__device__ __constant__ size_t particleSize;
-__device__ __constant__ size_t locationPos;
-__device__ __constant__ size_t refLocationPos;
-__device__ __constant__ size_t velocityPos;
-__device__ __constant__ size_t velocityExtPos;
-__device__ __constant__ size_t cellDoFsPos;
-#endif
-
 template<int dim>
 class pfem2Particle
 {
@@ -45,11 +36,8 @@ public:
 	const Tensor<1,dim> &get_velocity_ext() const;
 	void set_velocity_ext (const Tensor<1,dim> &new_ext_velocity);
 
+	int get_cell_dof(const unsigned int vertex_index) const;
 	void set_cell_dofs(const typename DoFHandler<dim>::active_cell_iterator &cell);
-
-#ifdef WITH_CUDA
-	static void set_cuda_constants();
-#endif
 
 	typename Triangulation<dim>::cell_iterator get_surrounding_cell(const Triangulation<dim> &triangulation) const;
 	typename DoFHandler<dim>::cell_iterator get_surrounding_cell(const Triangulation<dim> &triangulation, const DoFHandler<dim> &dof_handler) const;
@@ -59,7 +47,8 @@ public:
 	std::size_t serialized_size_in_bytes() const;
 	
 	void write_data(void* &data) const;
-	
+
+private:
 	Point<dim> location;
 	Point<dim> reference_location;
 	unsigned int id;

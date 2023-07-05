@@ -10,12 +10,12 @@ PoiseuilleFlow3DSolver::PoiseuilleFlow3DSolver(pfem2Fem<3> *femSolver,
 	pressureDirichletBCpatchIDs = { 0, 1 };
 }
 
-const double PoiseuilleFlow3DSolver::velocityDirichletBC(unsigned int boundaryID, unsigned int component) const
+double PoiseuilleFlow3DSolver::velocityDirichletBC(unsigned int boundaryID, unsigned int component) const
 {
 	return 0;
 }
 
-const double PoiseuilleFlow3DSolver::pressureDirichletBC(unsigned int boundaryID) const
+double PoiseuilleFlow3DSolver::pressureDirichletBC(unsigned int boundaryID) const
 {
 	return (boundaryID == 0) ? 100.0 : 0.0;
 }

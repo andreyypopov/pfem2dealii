@@ -35,7 +35,7 @@ pfem2Solver<dim>::~pfem2Solver()
 }
 
 template<int dim>
-const MPI_Comm pfem2Solver<dim>::getCommunicator() const
+const MPI_Comm& pfem2Solver<dim>::getCommunicator() const
 {
 	return mpi_communicator;
 }

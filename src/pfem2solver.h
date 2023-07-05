@@ -20,7 +20,7 @@ public:
 	pfem2Solver(pfem2Fem<dim> *femSolver, pfem2ParticleHandler<dim> *particleHandler, pfem2ParameterHandler<dim> *parameterHandler);
 	virtual ~pfem2Solver();
 	
-	const MPI_Comm getCommunicator() const;
+	const MPI_Comm& getCommunicator() const;
 	const ConditionalOStream& getPcout() const;
 	TimerOutput& getTimer();
 
@@ -38,8 +38,8 @@ public:
 
 	const bool& getNeedLoadsCalculation() const;
 
-	virtual const double velocityDirichletBC(unsigned int boundaryID, unsigned int component = 0) const = 0;
-	virtual const double pressureDirichletBC(unsigned int boundaryID) const = 0;
+	virtual double velocityDirichletBC(unsigned int boundaryID, unsigned int component = 0) const = 0;
+	virtual double pressureDirichletBC(unsigned int boundaryID) const = 0;
 	
 	virtual void run();
 

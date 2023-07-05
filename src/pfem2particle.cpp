@@ -80,43 +80,17 @@ unsigned int pfem2Particle<dim>::get_id () const
 }
 
 template<int dim>
+int pfem2Particle<dim>::get_cell_dof(const unsigned int index) const
+{
+	return (index < GeometryInfo<dim>::vertices_per_cell) ? cell_dofs[index] : -1;
+}
+
+template<int dim>
 void pfem2Particle<dim>::set_cell_dofs(const typename DoFHandler<dim>::active_cell_iterator &cell)
 {
 	for(unsigned int i = 0; i < GeometryInfo<dim>::vertices_per_cell; ++i)
 		cell_dofs[i] = cell->vertex_dof_index(i, 0);
 }
-
-#ifdef WITH_CUDA
-template<int dim>
-void pfem2Particle<dim>::set_cuda_constants()
-{
-	cudaError_t err = cudaSuccess;
-	
-	size_t pfem2ParticleSize = sizeof(pfem2Particle<dim>);
-	err = cudaMemcpyToSymbol(particleSize, &pfem2ParticleSize,  sizeof(size_t));
-	if (err != cudaSuccess) std::cout << cudaGetErrorString(err) << std::endl;
-	
-	size_t locationOffset = offsetof(pfem2Particle<dim>, location);
-	err = cudaMemcpyToSymbol(locationPos, &locationOffset,  sizeof(size_t));
-	if (err != cudaSuccess) std::cout << cudaGetErrorString(err) << std::endl;
-	
-	size_t refLocationOffset = offsetof(pfem2Particle<dim>, reference_location);
-	err = cudaMemcpyToSymbol(refLocationPos, &refLocationOffset,  sizeof(size_t));
-	if (err != cudaSuccess) std::cout << cudaGetErrorString(err) << std::endl;
-	
-	size_t velocityOffset = offsetof(pfem2Particle<dim>, velocity);
-	err = cudaMemcpyToSymbol(velocityPos, &velocityOffset,  sizeof(size_t));
-	if (err != cudaSuccess) std::cout << cudaGetErrorString(err) << std::endl;
-	
-	size_t velocityExtOffset = offsetof(pfem2Particle<dim>, velocity_ext);
-	err = cudaMemcpyToSymbol(velocityExtPos, &velocityExtOffset,  sizeof(size_t));
-	if (err != cudaSuccess) std::cout << cudaGetErrorString(err) << std::endl;
-	
-	size_t cellDofsOffset = offsetof(pfem2Particle<dim>, cell_dofs);
-	err = cudaMemcpyToSymbol(cellDoFsPos, &cellDofsOffset,  sizeof(size_t));
-	if (err != cudaSuccess) std::cout << cudaGetErrorString(err) << std::endl;
-}
-#endif
 
 template<int dim>
 int pfem2Particle<dim>::get_tria_position() const

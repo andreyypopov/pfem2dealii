@@ -42,7 +42,7 @@ nacaAirfoilSolver::nacaAirfoilSolver(pfem2Fem<2> *femSolver,
 	pressureDirichletBCpatchIDs = { 2 };
 }
 
-const double nacaAirfoilSolver::velocityDirichletBC(unsigned int boundaryID, unsigned int component) const
+double nacaAirfoilSolver::velocityDirichletBC(unsigned int boundaryID, unsigned int component) const
 {
 	switch (boundaryID)
 	{
@@ -56,7 +56,7 @@ const double nacaAirfoilSolver::velocityDirichletBC(unsigned int boundaryID, uns
 	}
 }
 
-const double nacaAirfoilSolver::pressureDirichletBC(unsigned int boundaryID) const
+double nacaAirfoilSolver::pressureDirichletBC(unsigned int boundaryID) const
 {
 	return 0;
 }

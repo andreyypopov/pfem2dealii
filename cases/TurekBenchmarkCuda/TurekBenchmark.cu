@@ -1,7 +1,9 @@
-#include "TurekBenchmark.h"
+#include "TurekBenchmark.cuh"
 
 #include <deal.II/dofs/dof_tools.h>
 #include <deal.II/numerics/vector_tools.h>
+
+#include "../../src/cuda/cudapfem2particlehandler.cuh"
 
 double parabolicBC::value(const Point<2> &p, const unsigned int) const
 {
@@ -36,7 +38,7 @@ double TurekBenchmarkSolver::pressureDirichletBC(unsigned int boundaryID) const
 }
 
 TurekBenchmarkFemSolver::TurekBenchmarkFemSolver(const FE_Q<2> *finite_element)
-	: pfem2Fem<2>(finite_element)
+	: cudaPfem2Fem<2>(finite_element)
 {
 }
 
@@ -99,7 +101,7 @@ int main (int argc, char *argv[])
 
 	FE_Q<2> finiteElement(1);
 	TurekBenchmarkFemSolver fem(&finiteElement);
-	pfem2ParticleHandler<2> particleHandler(&finiteElement);
+	cudaPfem2ParticleHandler<2> particleHandler(&finiteElement);
 	pfem2ParameterHandler<2> parameterHandler;
 
 	TurekBenchmarkSolver TurekBenchmarkProblem(&fem, &particleHandler, &parameterHandler);
