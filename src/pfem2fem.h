@@ -111,6 +111,8 @@ protected:
 	
 	pfem2Solver<dim>* mainSolver;
 
+	unsigned int n_dofs;
+
 private:
 	SolverControl solver_control;
 	TrilinosWrappers::SolverBase *trilinosSolver;

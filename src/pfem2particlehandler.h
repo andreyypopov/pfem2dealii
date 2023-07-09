@@ -35,7 +35,7 @@ public:
 	void setPfem2Solver(pfem2Solver<dim> *mainSolver);
 
     virtual void seed_particles();
-    void correct_particle_velocity();
+    virtual void correct_particle_velocity();
     void move_particles();
     void project_particle_fields();
 

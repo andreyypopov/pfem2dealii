@@ -16,6 +16,7 @@ public:
 	void set_vertex_coords(const Point<dim> &p, int i);
 
 	__host__ __device__ const double* get_vertex_coords() const;
+	__host__ __device__ const types::global_dof_index* get_dof_indices() const;
 
 private:
 	int index;
@@ -31,16 +32,24 @@ public:
 	cudaPfem2Fem(const FE_Q<dim> *finite_element);
 	virtual ~cudaPfem2Fem();
 
-	virtual void setup_system();
+	virtual void setup_system() override;
+
+	virtual void initialize_fem_solution() override;
 
 	const cudaPfem2Cell<dim>* getCells() const;
+	const double *getDeviceSolutionV() const;
+	const double *getDeviceOldSolutionV() const;
 
 private:
 	Point<dim> *d_vertices;
 	cudaPfem2Cell<dim> *d_cells;
 
-	double *d_solutionV[dim];
-	double *d_oldSolutionV[dim];
+	//vectors containing all components of solution (all values for x, then for y, then z)
+	double *d_solutionV;
+	double *d_oldSolutionV;
+
+	std::array<Vector<double>, dim> hostSolutionV;
+	std::array<Vector<double>, dim> hostOldSolutionV;
 };
 
 template class cudaPfem2Cell<2>;
@@ -49,4 +58,4 @@ template class cudaPfem2Cell<3>;
 template class cudaPfem2Fem<2>;
 template class cudaPfem2Fem<3>;
 
-#endif // CUDAPFEM2PARTICLEHANDLER_H
+#endif // CUDAPFEM2FEM_H

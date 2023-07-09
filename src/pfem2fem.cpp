@@ -56,6 +56,7 @@ void pfem2Fem<dim>::setup_system()
 
 	dof_handler.distribute_dofs(*feq);
 	mainSolver->getPcout() << "Number of degrees of freedom for each field: " << dof_handler.n_dofs() << std::endl;
+	n_dofs = dof_handler.n_dofs();
 
 	locally_owned_dofs = dof_handler.locally_owned_dofs();
     DoFTools::extract_locally_relevant_dofs (dof_handler, locally_relevant_dofs);

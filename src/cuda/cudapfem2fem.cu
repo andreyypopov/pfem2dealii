@@ -36,6 +36,12 @@ __host__ __device__ const double *cudaPfem2Cell<dim>::get_vertex_coords() const
     return vertex_coords;
 }
 
+template <int dim>
+__host__ __device__ const types::global_dof_index *cudaPfem2Cell<dim>::get_dof_indices() const
+{
+    return dof_indices;
+}
+
 template<int dim>
 cudaPfem2Fem<dim>::cudaPfem2Fem(const FE_Q<dim> *finite_element)
 	: pfem2Fem<dim>(finite_element)
@@ -48,10 +54,8 @@ cudaPfem2Fem<dim>::~cudaPfem2Fem()
 {
 	cudaFree(d_vertices);
 	cudaFree(d_cells);
-	for(int i = 0; i < dim; ++i){
-		cudaFree(d_solutionV[i]);
-		cudaFree(d_oldSolutionV[i]);
-	}
+	cudaFree(d_solutionV);
+	cudaFree(d_oldSolutionV);
 }
 
 template<int dim>
@@ -83,8 +87,26 @@ void cudaPfem2Fem<dim>::setup_system()
 	checkCudaErrors(cudaMemcpy(d_cells, hostCells.data(), sizeof(cudaPfem2Cell<dim>) * tria.n_cells(), cudaMemcpyHostToDevice));
 
 	for(int i = 0; i < dim; ++i){
-		checkCudaErrors(cudaMalloc(&d_solutionV[i], sizeof(double) * this->dof_handler.n_dofs() * dim));
-		checkCudaErrors(cudaMalloc(&d_oldSolutionV[i], sizeof(double) * this->dof_handler.n_dofs() * dim));
+		hostSolutionV[i].reinit(this->n_dofs);
+		hostOldSolutionV[i].reinit(this->n_dofs);
+	}
+
+	checkCudaErrors(cudaMalloc(&d_solutionV, sizeof(double) * this->n_dofs * dim));
+	checkCudaErrors(cudaMalloc(&d_oldSolutionV, sizeof(double) * this->n_dofs * dim));
+}
+
+template <int dim>
+void cudaPfem2Fem<dim>::initialize_fem_solution()
+{
+	pfem2Fem<dim>::initialize_fem_solution();
+
+	const Tensor<1, dim> initialVelocity = this->mainSolver->getParameterHandler().getVelocityInitialValue();
+	for (int i = 0; i < dim; ++i){
+		hostSolutionV[i] = initialVelocity[i];
+		hostOldSolutionV[i] = initialVelocity[i];
+
+		checkCudaErrors(cudaMemcpy(d_solutionV + i * this->n_dofs, hostSolutionV[i].data(), sizeof(double) * this->n_dofs, cudaMemcpyHostToDevice));
+		checkCudaErrors(cudaMemcpy(d_oldSolutionV + i * this->n_dofs, hostOldSolutionV[i].data(), sizeof(double) * this->n_dofs, cudaMemcpyHostToDevice));
 	}
 }
 
@@ -92,4 +114,16 @@ template<int dim>
 const cudaPfem2Cell<dim>* cudaPfem2Fem<dim>::getCells() const
 {
 	return d_cells;
+}
+
+template <int dim>
+const double *cudaPfem2Fem<dim>::getDeviceSolutionV() const
+{
+    return d_solutionV;
+}
+
+template <int dim>
+const double *cudaPfem2Fem<dim>::getDeviceOldSolutionV() const
+{
+    return d_oldSolutionV;
 }
