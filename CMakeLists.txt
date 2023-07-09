@@ -46,6 +46,10 @@ add_subdirectory(utils/repairMesh3D)
 install(TARGETS pfem2dealii)
 install(FILES ${header_files} DESTINATION include)
 
+if (WITH_CUDA)
+install(FILES ${cuda_header_files} DESTINATION include/cuda)
+endif()
+
 set_target_properties(pfem2dealii PROPERTIES VERSION 1.0)
 set_target_properties(pfem2dealii PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
