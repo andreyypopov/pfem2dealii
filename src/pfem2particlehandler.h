@@ -37,7 +37,7 @@ public:
     virtual void seed_particles();
     virtual void correct_particle_velocity();
     void move_particles();
-    void project_particle_fields();
+    virtual void project_particle_fields();
 
     void output_particle_solution(int timestep_number);
 

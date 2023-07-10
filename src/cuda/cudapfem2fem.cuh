@@ -38,6 +38,7 @@ public:
 
 	const cudaPfem2Cell<dim>* getCells() const;
 	const double *getDeviceSolutionV() const;
+	double *getDeviceSolutionV();
 	const double *getDeviceOldSolutionV() const;
 
 private:

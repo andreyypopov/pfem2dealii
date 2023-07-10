@@ -123,6 +123,12 @@ const double *cudaPfem2Fem<dim>::getDeviceSolutionV() const
 }
 
 template <int dim>
+double *cudaPfem2Fem<dim>::getDeviceSolutionV()
+{
+    return d_solutionV;
+}
+
+template <int dim>
 const double *cudaPfem2Fem<dim>::getDeviceOldSolutionV() const
 {
     return d_oldSolutionV;
